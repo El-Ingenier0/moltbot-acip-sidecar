@@ -7,9 +7,9 @@
 This repo is intended to be a small localhost HTTP service (Rust) that:
 - accepts external content (HTML/PDF/text) via a single `ingest_source` endpoint
 - applies deterministic truncation (head/tail + optional section selection)
-- runs a **two-tier** model policy:
-  - **L1:** Gemini Flash (cheap-first)
-  - **L2:** Anthropic Haiku (fallback when L1 fails / bad JSON / schema violation)
+- runs a **two-tier** model policy (configurable):
+  - **L1 (cheap-first):** defaults to Gemini Flash (`gemini-2.0-flash`)
+  - **L2 (fallback):** defaults to Anthropic Haiku (`claude-3-5-haiku-latest`)
 - returns only:
   - `fenced_content` (safe to append)
   - `tools_allowed` (hard gate for tool dispatcher)

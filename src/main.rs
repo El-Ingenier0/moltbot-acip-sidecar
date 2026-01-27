@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
+mod model_policy;
 mod secrets;
 
 #[derive(Parser, Debug)]
@@ -48,6 +49,7 @@ struct Args {
 struct AppState {
     policy: Policy,
     secrets: Arc<dyn secrets::SecretStore>,
+    model_policy: model_policy::PolicyConfig,
 }
 
 #[derive(Clone, Debug)]
@@ -251,12 +253,42 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(secrets::EnvStore)
     };
 
+    // Model policy (configurable). Defaults: Gemini Flash → Haiku fallback.
+    let mut mp = model_policy::PolicyConfig::default();
+
+    if let Some(p) = secrets.get("ACIP_L1_PROVIDER") {
+        if let Some(parsed) = model_policy::Provider::parse(&p) {
+            mp.l1.provider = parsed;
+        } else {
+            warn!("Unknown ACIP_L1_PROVIDER={}; using default", p);
+        }
+    }
+    if let Some(m) = secrets.get("ACIP_L1_MODEL") {
+        mp.l1.model = m;
+    }
+
+    if let Some(p) = secrets.get("ACIP_L2_PROVIDER") {
+        if let Some(parsed) = model_policy::Provider::parse(&p) {
+            mp.l2.provider = parsed;
+        } else {
+            warn!("Unknown ACIP_L2_PROVIDER={}; using default", p);
+        }
+    }
+    if let Some(m) = secrets.get("ACIP_L2_MODEL") {
+        mp.l2.model = m;
+    }
+
+    info!(
+        "model policy: L1={:?}/{}; L2={:?}/{}",
+        mp.l1.provider, mp.l1.model, mp.l2.provider, mp.l2.model
+    );
+
     // For v0.1 we don't *use* the provider keys yet, but we can warn early.
     if secrets.get("GEMINI_API_KEY").is_none() {
-        warn!("GEMINI_API_KEY not set (ok for v0.1; required for L1 model calls)");
+        warn!("GEMINI_API_KEY not set (ok for v0.1; required for Gemini L1 model calls)");
     }
     if secrets.get("ANTHROPIC_API_KEY").is_none() {
-        warn!("ANTHROPIC_API_KEY not set (ok for v0.1; required for L2 fallback)");
+        warn!("ANTHROPIC_API_KEY not set (ok for v0.1; required for Anthropic L2 fallback)");
     }
 
     let state = Arc::new(AppState {
@@ -266,6 +298,7 @@ async fn main() -> anyhow::Result<()> {
             full_if_lte: args.full_if_lte,
         },
         secrets,
+        model_policy: mp,
     });
 
     let app = Router::new()
