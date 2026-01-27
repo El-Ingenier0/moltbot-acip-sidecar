@@ -1,0 +1,16 @@
+# Rust / cargo
+/target/
+Cargo.lock
+
+# Local env
+.env
+.env.*
+*.local
+
+# SQLite / state
+*.sqlite
+*.db
+
+# IDE
+.vscode/
+.idea/
