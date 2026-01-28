@@ -17,6 +17,7 @@ mod model_policy;
 mod policy_store;
 mod routes;
 mod secrets;
+mod sentry;
 mod state;
 
 #[derive(Parser, Debug)]
@@ -98,22 +99,7 @@ struct PolicyInfo {
     full_if_lte: usize,
 }
 
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-enum RiskLevel {
-    Low,
-    Medium,
-    High,
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-enum Action {
-    Allow,
-    Sanitize,
-    Block,
-    NeedsReview,
-}
+// RiskLevel/Action types live in sentry module now.
 
 #[derive(Serialize, Debug)]
 struct IngestResponse {
@@ -122,8 +108,8 @@ struct IngestResponse {
     policy: PolicyInfo,
 
     tools_allowed: bool,
-    risk_level: RiskLevel,
-    action: Action,
+    risk_level: sentry::RiskLevel,
+    action: sentry::Action,
 
     fenced_content: String,
     reasons: Vec<String>,
@@ -213,14 +199,70 @@ async fn ingest_source(
 
     let (trunc_text, truncated) = apply_head_tail(&state.policy, &raw);
 
-    // TODO(v0.2): run L1 (Gemini Flash) -> strict JSON; fallback L2 (Haiku)
-    let tools_allowed = true;
-    let risk_level = RiskLevel::Low;
-    let action = Action::Allow;
+    // v0.2: run sentry enforcement.
+    let policy_name = routes::policy_name_from_headers(&headers);
+    let policy = match state.policies.require(&policy_name) {
+        Ok(p) => p,
+        Err(_) => {
+            let mut names = state.policies.list();
+            names.sort();
+            return introspection::json_error(
+                StatusCode::BAD_REQUEST,
+                "unknown policy",
+                serde_json::json!({"requested": policy_name, "available": names}),
+            )
+            .into_response();
+        }
+    };
+
+    let http = reqwest::Client::new();
+    let l1: Box<dyn sentry::ModelClient> = match policy.l1.provider {
+        model_policy::Provider::Gemini => Box::new(sentry::GeminiClient::new(
+            http.clone(),
+            state.secrets.clone(),
+        )),
+        model_policy::Provider::Anthropic => Box::new(sentry::AnthropicClient::new(
+            http.clone(),
+            state.secrets.clone(),
+        )),
+    };
+    let l2: Box<dyn sentry::ModelClient> = match policy.l2.provider {
+        model_policy::Provider::Gemini => Box::new(sentry::GeminiClient::new(
+            http.clone(),
+            state.secrets.clone(),
+        )),
+        model_policy::Provider::Anthropic => Box::new(sentry::AnthropicClient::new(
+            http.clone(),
+            state.secrets.clone(),
+        )),
+    };
+    let engine = sentry::DecisionEngine::new(l1, l2);
+
+    let source_meta = serde_json::json!({
+        "source_id": req.source_id,
+        "source_type": format!("{:?}", req.source_type),
+        "content_type": req.content_type,
+        "url": req.url,
+        "title": req.title,
+        "turn_id": req.turn_id,
+        "digest_sha256": sha,
+        "original_length_chars": raw.chars().count(),
+        "truncated": truncated,
+    });
+
+    let decision = engine
+        .decide(
+            &policy_name,
+            &policy,
+            &source_meta,
+            &fence_external(&trunc_text),
+            &headers,
+        )
+        .await;
 
     let resp = IngestResponse {
         digest: DigestInfo {
-            sha256: sha,
+            sha256: sha.clone(),
             length: raw.chars().count(),
         },
         truncated,
@@ -229,12 +271,12 @@ async fn ingest_source(
             tail: state.policy.tail,
             full_if_lte: state.policy.full_if_lte,
         },
-        tools_allowed,
-        risk_level,
-        action,
-        fenced_content: fence_external(&trunc_text),
-        reasons: vec!["v0.1 passthrough (no model sentry yet)".to_string()],
-        detected_patterns: vec![],
+        tools_allowed: decision.tools_allowed,
+        risk_level: decision.risk_level,
+        action: decision.action,
+        fenced_content: decision.fenced_content,
+        reasons: decision.reasons,
+        detected_patterns: decision.detected_patterns,
     };
 
     (StatusCode::OK, Json(resp)).into_response()
