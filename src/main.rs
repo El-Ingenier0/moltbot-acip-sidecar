@@ -553,7 +553,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Policy store: load from policies.json when provided, otherwise fall back
     // to env-configured single 'default' policy.
-    let policies = if let Some(policies_path) = &args.policies_file {
+
+    let effective_policies_file: Option<PathBuf> = args
+        .policies_file
+        .clone()
+        .or_else(|| cfg_policy.and_then(|pol| pol.policies_file.as_ref()).map(PathBuf::from));
+
+    let policies = if let Some(policies_path) = &effective_policies_file {
         let pf = policy_store::PoliciesFile::load(policies_path)?;
         policy_store::PolicyStore::from_file(pf)
     } else {
