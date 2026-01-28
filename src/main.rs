@@ -158,9 +158,23 @@ async fn health() -> impl IntoResponse {
 
 async fn ingest_source(
     State(state): State<Arc<state::AppState>>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
     Json(req): Json<IngestRequest>,
 ) -> impl IntoResponse {
+    // Multi-policy selection (v0.1): validate policy selection early.
+    // Unknown policy -> 400 (fail loud).
+    let policy_name = routes::policy_name_from_headers(&headers);
+    if state.policies.require(&policy_name).is_err() {
+        let mut names = state.policies.list();
+        names.sort();
+        return introspection::json_error(
+            StatusCode::BAD_REQUEST,
+            "unknown policy",
+            serde_json::json!({"requested": policy_name, "available": names}),
+        )
+        .into_response();
+    }
+
     // v0.1 behavior:
     // - Accept text or base64 bytes
     // - If bytes, decode and best-effort treat as UTF-8 (PDF extraction to be added)

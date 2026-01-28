@@ -67,4 +67,11 @@ impl PolicyStore {
     pub fn get(&self, name: &str) -> Option<&PolicyConfig> {
         self.policies.get(name)
     }
+
+    /// Require a policy to exist; returns a cloned PolicyConfig.
+    pub fn require(&self, name: &str) -> Result<PolicyConfig> {
+        self.get(name)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown policy: {name}"))
+    }
 }

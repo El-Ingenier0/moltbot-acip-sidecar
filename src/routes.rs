@@ -9,7 +9,7 @@ use axum::{
 use serde_json::json;
 use std::sync::Arc;
 
-fn get_policy_name(headers: &HeaderMap) -> String {
+pub fn policy_name_from_headers(headers: &HeaderMap) -> String {
     headers
         .get("x-acip-policy")
         .and_then(|v| v.to_str().ok())
@@ -28,7 +28,7 @@ pub async fn get_policy(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let name = get_policy_name(&headers);
+    let name = policy_name_from_headers(&headers);
     let Some(p) = state.policies.get(&name) else {
         let mut names = state.policies.list();
         names.sort();
