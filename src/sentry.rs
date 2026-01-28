@@ -57,14 +57,38 @@ impl Decision {
 }
 
 fn extract_json_only(s: &str) -> &str {
-    // Very simple: try to locate first '{' and last '}' to strip surrounding prose.
-    let Some(start) = s.find('{') else { return s };
-    let Some(end) = s.rfind('}') else { return s };
-    if end > start {
-        &s[start..=end]
-    } else {
-        s
+    // Best-effort: locate a valid JSON object/array within the model output.
+    // We try the full string first, then progressively try substrings.
+    if s.trim_start().starts_with('{') || s.trim_start().starts_with('[') {
+        return s;
     }
+
+    // Try from first '{' or '[' to various end positions.
+    let start_obj = s.find('{');
+    let start_arr = s.find('[');
+    let start = match (start_obj, start_arr) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
+    let Some(start) = start else { return s };
+
+    // Walk backwards over potential end chars and attempt JSON parse.
+    for (i, ch) in s.char_indices().rev() {
+        if i <= start {
+            break;
+        }
+        if ch != '}' && ch != ']' {
+            continue;
+        }
+        let candidate = &s[start..=i];
+        if serde_json::from_str::<serde_json::Value>(candidate).is_ok() {
+            return candidate;
+        }
+    }
+
+    s
 }
 
 pub fn parse_and_validate_decision(raw: &str) -> Result<Decision> {
