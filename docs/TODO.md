@@ -31,6 +31,14 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 - [x] **Hard-cap tools for HTML/SVG**: if input is HTML-like or SVG-like, force `tools_allowed=false` regardless of model decision; record reason in response.
 - [x] **Tests**: ensure even if model returns `tools_allowed=true`, HTML/SVG responses return `tools_allowed=false`.
 
+## Threat intel (MVP++)
+- [ ] **Define attack taxonomy**: add `AttackType` enum (prompt_injection, data_exfiltration, tool_coercion, credential_theft, jailbreak, social_engineering, etc.).
+- [ ] **Heuristic detectors**: scan `model_text` for high-signal patterns and emit `attack_types` + `indicators`.
+- [ ] **Plumb threat fields into ingest response**: include `attack_types`, `attack_indicators`, and `threat_score` (or risk hints).
+- [ ] **Source reputation store**: persist per-source_id / per-host counters (seen, suspected_attacks, last_seen, last_attack_types).
+- [ ] **Raise risk for bad actors**: if source reputation is bad, bump threat_score / risk_level and cap tools even for non-markup unless explicitly overridden.
+- [ ] **Tests**: unit tests for taxonomy + detectors + reputation bumping.
+
 ## P3 (low)
 - [x] **Make `config.example.toml` match actual config schema fully** (document remaining keys as added).
 - [x] **Docs**: explain loopback default behavior and how token requirement changes when `allow_insecure_loopback=false`.
