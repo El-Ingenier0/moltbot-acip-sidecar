@@ -9,20 +9,12 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use std::time::Duration;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
 use moltbot_acip_sidecar::{
-    app,
-    config,
-    introspection,
-    model_policy,
-    policy_store,
-    routes,
-    secrets,
-    sentry,
-    state,
+    app, config, introspection, model_policy, policy_store, routes, secrets, sentry, state,
 };
 
 #[derive(Parser, Debug)]
@@ -221,7 +213,6 @@ fn groupname_from_gid(gid: libc::gid_t) -> anyhow::Result<String> {
     }
 }
 
-
 async fn ingest_source(
     State(state): State<Arc<state::AppState>>,
     headers: HeaderMap,
@@ -402,7 +393,10 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => {
             if let Some(ioe) = e.downcast_ref::<std::io::Error>() {
                 if ioe.kind() == std::io::ErrorKind::NotFound {
-                    info!("config file not found at {}; continuing", config_path.display());
+                    info!(
+                        "config file not found at {}; continuing",
+                        config_path.display()
+                    );
                     None
                 } else {
                     return Err(e);
@@ -510,7 +504,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-
     // Secrets: secrets file (optional) + env fallback.
     let secrets: Arc<dyn secrets::SecretStore> = if let Some(path) = &args.secrets_file {
         match secrets::EnvFileStore::load(path) {
@@ -552,10 +545,11 @@ async fn main() -> anyhow::Result<()> {
     // Policy store: load from policies.json when provided, otherwise fall back
     // to env-configured single 'default' policy.
 
-    let effective_policies_file: Option<PathBuf> = args
-        .policies_file
-        .clone()
-        .or_else(|| cfg_policy.and_then(|pol| pol.policies_file.as_ref()).map(PathBuf::from));
+    let effective_policies_file: Option<PathBuf> = args.policies_file.clone().or_else(|| {
+        cfg_policy
+            .and_then(|pol| pol.policies_file.as_ref())
+            .map(PathBuf::from)
+    });
 
     let policies = if let Some(policies_path) = &effective_policies_file {
         let pf = policy_store::PoliciesFile::load(policies_path)?;

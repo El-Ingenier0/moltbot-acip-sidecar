@@ -1,4 +1,8 @@
-use axum::{body::Body, http::{Request, StatusCode}, Router};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+    Router,
+};
 use moltbot_acip_sidecar::{app, policy_store, secrets, state};
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -28,7 +32,12 @@ fn app_with_token(token: Option<String>) -> Router {
 async fn health_is_unprotected() {
     let app = app_with_token(Some("secret".into()));
     let resp = app
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

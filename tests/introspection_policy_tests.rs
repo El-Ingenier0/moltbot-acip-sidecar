@@ -17,7 +17,10 @@ fn app_with_policies(names: &[&str]) -> Router {
         moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
     );
     for n in names {
-        policies.insert(n.to_string(), moltbot_acip_sidecar::model_policy::PolicyConfig::default());
+        policies.insert(
+            n.to_string(),
+            moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        );
     }
 
     let store = policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies });
@@ -44,12 +47,19 @@ fn app_with_policies(names: &[&str]) -> Router {
 async fn schema_endpoint_returns_json_schema() {
     let app = app_with_policies(&[]);
     let resp = app
-        .oneshot(Request::builder().uri("/v1/acip/schema").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/acip/schema")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = http_body_util::BodyExt::collect(resp.into_body()).await.unwrap();
+    let body = http_body_util::BodyExt::collect(resp.into_body())
+        .await
+        .unwrap();
     let v: Value = serde_json::from_slice(&body.to_bytes()).unwrap();
 
     assert_eq!(v["title"], "AcipDecision");
@@ -72,11 +82,16 @@ async fn policies_endpoint_lists_policies_sorted() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::OK);
-    let body = http_body_util::BodyExt::collect(resp.into_body()).await.unwrap();
+    let body = http_body_util::BodyExt::collect(resp.into_body())
+        .await
+        .unwrap();
     let v: Value = serde_json::from_slice(&body.to_bytes()).unwrap();
 
     let arr = v["policies"].as_array().unwrap();
-    let names: Vec<String> = arr.iter().map(|x| x.as_str().unwrap().to_string()).collect();
+    let names: Vec<String> = arr
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
     assert_eq!(names, vec!["a", "b", "default"]);
 }
 
@@ -84,7 +99,12 @@ async fn policies_endpoint_lists_policies_sorted() {
 async fn get_policy_defaults_to_default() {
     let app = app_with_policies(&[]);
     let resp = app
-        .oneshot(Request::builder().uri("/v1/acip/policy").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v1/acip/policy")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -105,8 +125,13 @@ async fn unknown_policy_returns_400() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = http_body_util::BodyExt::collect(resp.into_body()).await.unwrap();
+    let body = http_body_util::BodyExt::collect(resp.into_body())
+        .await
+        .unwrap();
     let v: Value = serde_json::from_slice(&body.to_bytes()).unwrap();
     assert_eq!(v["error"], "unknown policy");
-    assert!(v["extra"]["available"].as_array().unwrap().contains(&Value::String("default".into())));
+    assert!(v["extra"]["available"]
+        .as_array()
+        .unwrap()
+        .contains(&Value::String("default".into())));
 }

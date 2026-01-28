@@ -1,9 +1,5 @@
 use crate::{routes, state, token_auth};
-use axum::{
-    extract::DefaultBodyLimit,
-    routing::get,
-    Router,
-};
+use axum::{extract::DefaultBodyLimit, routing::get, Router};
 use std::sync::Arc;
 
 pub async fn health() -> &'static str {

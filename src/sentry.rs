@@ -13,7 +13,8 @@ static DECISION_SCHEMA: Lazy<jsonschema::JSONSchema> = Lazy::new(|| {
     jsonschema::JSONSchema::compile(&schema).expect("decision schema must compile")
 });
 
-static DECISION_SCHEMA_TEXT: Lazy<String> = Lazy::new(|| introspection::decision_schema().to_string());
+static DECISION_SCHEMA_TEXT: Lazy<String> =
+    Lazy::new(|| introspection::decision_schema().to_string());
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]

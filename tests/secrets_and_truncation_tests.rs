@@ -60,7 +60,9 @@ fn secrets_file_permissions_enforced() {
         fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
 
-        let err = secrets::EnvFileStore::load(&path).err().expect("expected error");
+        let err = secrets::EnvFileStore::load(&path)
+            .err()
+            .expect("expected error");
         let msg = format!("{err:#}");
         assert!(msg.contains("permissions too open"));
 

@@ -29,7 +29,10 @@ fn app() -> Router {
     // the policy selection helper behavior via /v1/acip/policy.
     // (Full ingest gating is covered indirectly in the binary.)
     Router::new()
-        .route("/v1/acip/policy", axum::routing::get(moltbot_acip_sidecar::routes::get_policy))
+        .route(
+            "/v1/acip/policy",
+            axum::routing::get(moltbot_acip_sidecar::routes::get_policy),
+        )
         .with_state(st)
 }
 

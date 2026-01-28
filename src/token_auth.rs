@@ -1,9 +1,9 @@
 use crate::introspection;
 use axum::{
+    extract::State,
     http::{HeaderMap, StatusCode},
     middleware::{from_fn_with_state, Next},
     response::IntoResponse,
-    extract::State,
     Router,
 };
 
