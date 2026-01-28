@@ -108,6 +108,11 @@ struct IngestResponse {
     truncated: bool,
     policy: PolicyInfo,
 
+    /// Length of the original decoded input (before any normalization).
+    original_length_chars: usize,
+    /// Length of the model-facing text (after normalization, before truncation).
+    model_length_chars: usize,
+
     tools_allowed: bool,
     risk_level: sentry::RiskLevel,
     action: sentry::Action,
@@ -286,7 +291,13 @@ async fn ingest_source(
     hasher.update(raw.as_bytes());
     let sha = hex::encode(hasher.finalize());
 
-    let (trunc_text, truncated) = apply_head_tail(&state.policy, &raw);
+    // Normalization pipeline: keep `raw` for audit/digest, but generate separate model-facing text.
+    let model_text = raw.clone();
+
+    let original_length_chars = raw.chars().count();
+    let model_length_chars = model_text.chars().count();
+
+    let (trunc_text, truncated) = apply_head_tail(&state.policy, &model_text);
 
     // v0.2: run sentry enforcement.
     let policy_name = routes::policy_name_from_headers(&headers);
@@ -319,7 +330,7 @@ async fn ingest_source(
         let resp = IngestResponse {
             digest: DigestInfo {
                 sha256: sha.clone(),
-                length: raw.chars().count(),
+                length: original_length_chars,
             },
             truncated,
             policy: PolicyInfo {
@@ -327,6 +338,8 @@ async fn ingest_source(
                 tail: state.policy.tail,
                 full_if_lte: state.policy.full_if_lte,
             },
+            original_length_chars,
+            model_length_chars,
             tools_allowed: d.tools_allowed,
             risk_level: d.risk_level,
             action: d.action,
@@ -370,7 +383,8 @@ async fn ingest_source(
         "title": title,
         "turn_id": turn_id,
         "digest_sha256": sha,
-        "original_length_chars": raw.chars().count(),
+        "original_length_chars": original_length_chars,
+        "model_length_chars": model_length_chars,
         "truncated": truncated,
     });
 
@@ -387,7 +401,7 @@ async fn ingest_source(
     let resp = IngestResponse {
         digest: DigestInfo {
             sha256: sha.clone(),
-            length: raw.chars().count(),
+            length: original_length_chars,
         },
         truncated,
         policy: PolicyInfo {
@@ -395,6 +409,8 @@ async fn ingest_source(
             tail: state.policy.tail,
             full_if_lte: state.policy.full_if_lte,
         },
+        original_length_chars,
+        model_length_chars,
         tools_allowed: decision.tools_allowed,
         risk_level: decision.risk_level,
         action: decision.action,
@@ -656,4 +672,37 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod ingest_response_tests {
+    use super::*;
+
+    #[test]
+    fn ingest_response_includes_original_and_model_lengths() {
+        let resp = IngestResponse {
+            digest: DigestInfo {
+                sha256: "x".to_string(),
+                length: 10,
+            },
+            truncated: false,
+            policy: PolicyInfo {
+                head: 1,
+                tail: 1,
+                full_if_lte: 3,
+            },
+            original_length_chars: 10,
+            model_length_chars: 9,
+            tools_allowed: false,
+            risk_level: sentry::RiskLevel::Low,
+            action: sentry::Action::Allow,
+            fenced_content: "```external\nhello\n```".to_string(),
+            reasons: vec![],
+            detected_patterns: vec![],
+        };
+
+        let v = serde_json::to_value(resp).unwrap();
+        assert!(v.get("original_length_chars").is_some());
+        assert!(v.get("model_length_chars").is_some());
+    }
 }

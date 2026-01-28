@@ -20,7 +20,7 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 - [ ] **Safe PDF/SVG ingestion architecture**: if/when we add PDF rendering or SVG parsing, run it in a separate sandboxed process (no network, tight CPU/mem/time limits) to mitigate parser/rendering memory-corruption risk; then treat extracted text as untrusted (prompt-injection).
 
 ## MVP+: safer HTML/SVG handling before model exposure
-- [ ] **Add content normalization pipeline**: keep original raw for digest/audit, but generate a separate `model_text` for sentry decisions.
+- [x] **Add content normalization pipeline**: keep original raw for digest/audit, but generate a separate `model_text` for sentry decisions.
 - [ ] **HTML → structured text conversion** (minimally lossy): convert HTML to readable text/markdown-ish while preserving headings/lists/links as best we can.
 - [ ] **Drop active HTML content**: ensure scripts/styles/iframes don’t make it into model_text; remove obvious JS URLs (e.g. `javascript:`).
 - [ ] **SVG input handling**: treat as markup; extract visible text nodes only (no script) into model_text.
