@@ -16,6 +16,9 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 - [x] **Improve JSON extraction** in `sentry::extract_json_only` (current brace-slicing is brittle); consider strict JSON mode or a more robust parser strategy.
 - [x] **Reduce prompt bloat**: `DecisionEngine::build_prompt` includes full schema each call; consider caching schema text or using shorter schema reference.
 
+## Security follow-ups (post-MVP)
+- [ ] **Safe PDF/SVG ingestion architecture**: if/when we add PDF rendering or SVG parsing, run it in a separate sandboxed process (no network, tight CPU/mem/time limits) to mitigate parser/rendering memory-corruption risk; then treat extracted text as untrusted (prompt-injection).
+
 ## P3 (low)
 - [x] **Make `config.example.toml` match actual config schema fully** (document remaining keys as added).
 - [x] **Docs**: explain loopback default behavior and how token requirement changes when `allow_insecure_loopback=false`.
