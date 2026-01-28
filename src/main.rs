@@ -20,6 +20,7 @@ mod routes;
 mod secrets;
 mod sentry;
 mod state;
+mod token_auth;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -587,12 +588,18 @@ async fn main() -> anyhow::Result<()> {
         policies,
     });
 
+    let protected = token_auth::with_token_auth(
+        Router::new()
+            .route("/v1/acip/ingest_source", post(ingest_source))
+            .route("/v1/acip/schema", get(routes::get_schema))
+            .route("/v1/acip/policies", get(routes::list_policies))
+            .route("/v1/acip/policy", get(routes::get_policy)),
+        token_opt.clone(),
+    );
+
     let app = Router::new()
         .route("/health", get(health))
-        .route("/v1/acip/ingest_source", post(ingest_source))
-        .route("/v1/acip/schema", get(routes::get_schema))
-        .route("/v1/acip/policies", get(routes::list_policies))
-        .route("/v1/acip/policy", get(routes::get_policy))
+        .merge(protected)
         .with_state(state);
 
     let addr: SocketAddr = format!("{}:{}", effective_host, effective_port).parse()?;

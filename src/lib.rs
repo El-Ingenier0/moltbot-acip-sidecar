@@ -6,3 +6,4 @@ pub mod routes;
 pub mod secrets;
 pub mod sentry;
 pub mod state;
+pub mod token_auth;
