@@ -177,6 +177,49 @@ fn html_to_text(html: &str) -> String {
     out
 }
 
+fn is_svg_like(content_type: &str, text: &str) -> bool {
+    let ct = content_type.to_lowercase();
+    if ct.contains("image/svg") {
+        return true;
+    }
+    let t = text.trim_start().to_lowercase();
+    t.starts_with("<svg") || t.contains("<svg")
+}
+
+fn svg_to_text(svg: &str) -> String {
+    // Extract text nodes from SVG while dropping script/style content.
+    // roxmltree is a safe, non-validating XML parser.
+    let Ok(doc) = roxmltree::Document::parse(svg) else {
+        return String::new();
+    };
+
+    let mut parts: Vec<String> = vec![];
+    for node in doc.descendants() {
+        if !node.is_text() {
+            continue;
+        }
+
+        // Skip any text that is under <script> or <style>.
+        let mut skip = false;
+        for a in node.ancestors() {
+            if a.has_tag_name("script") || a.has_tag_name("style") {
+                skip = true;
+                break;
+            }
+        }
+        if skip {
+            continue;
+        }
+
+        let txt = node.text().unwrap_or("").trim();
+        if !txt.is_empty() {
+            parts.push(txt.to_string());
+        }
+    }
+
+    parts.join("\n")
+}
+
 fn apply_head_tail(policy: &state::Policy, text: &str) -> (String, bool) {
     let len = text.chars().count();
     if len <= policy.full_if_lte {
@@ -345,6 +388,8 @@ async fn ingest_source(
     // Normalization pipeline: keep `raw` for audit/digest, but generate separate model-facing text.
     let model_text = if is_html_like(&source_type, &content_type, &raw) {
         html_to_text(&raw)
+    } else if is_svg_like(&content_type, &raw) {
+        svg_to_text(&raw)
     } else {
         raw.clone()
     };
@@ -776,5 +821,14 @@ mod ingest_response_tests {
         let out = html_to_text(html);
         assert!(!out.to_lowercase().contains("steal"));
         assert!(!out.to_lowercase().contains("javascript:"));
+    }
+
+    #[test]
+    fn svg_normalization_extracts_text_and_drops_script() {
+        let svg = r#"<svg xmlns='http://www.w3.org/2000/svg'><text>Hello</text><script>IGNORE</script><text>World</text></svg>"#;
+        let out = svg_to_text(svg);
+        assert!(out.contains("Hello"));
+        assert!(out.contains("World"));
+        assert!(!out.contains("IGNORE"));
     }
 }
