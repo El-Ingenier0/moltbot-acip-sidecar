@@ -33,7 +33,7 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 
 ## Threat intel (MVP++)
 - [x] **Define attack taxonomy**: add `AttackType` enum (prompt_injection, data_exfiltration, tool_coercion, credential_theft, jailbreak, social_engineering, etc.).
-- [ ] **Heuristic detectors**: scan `model_text` for high-signal patterns and emit `attack_types` + `indicators`.
+- [x] **Heuristic detectors**: scan `model_text` for high-signal patterns and emit `attack_types` + `indicators`.
 - [ ] **Plumb threat fields into ingest response**: include `attack_types`, `attack_indicators`, and `threat_score` (or risk hints).
 - [ ] **Source reputation store**: persist per-source_id / per-host counters (seen, suspected_attacks, last_seen, last_attack_types).
 - [ ] **Raise risk for bad actors**: if source reputation is bad, bump threat_score / risk_level and cap tools even for non-markup unless explicitly overridden.
