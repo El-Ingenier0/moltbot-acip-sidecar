@@ -304,6 +304,40 @@ async fn ingest_source(
         }
     };
 
+    // Sentry mode:
+    // - live (default): call configured L1/L2 models
+    // - stub: skip model calls and fail safely (tools_allowed=false) while still returning fenced content
+    let mode = std::env::var("ACIP_SENTRY_MODE").unwrap_or_else(|_| "live".to_string());
+    if mode.trim().eq_ignore_ascii_case("stub") {
+        let mut d = sentry::Decision::fail_closed(
+            fence_external(&trunc_text),
+            vec!["sentry disabled (ACIP_SENTRY_MODE=stub)".to_string()],
+        );
+        // In stub mode we still allow content to be appended, but never allow tools.
+        d.risk_level = sentry::RiskLevel::Medium;
+        d.action = sentry::Action::Allow;
+        let resp = IngestResponse {
+            digest: DigestInfo {
+                sha256: sha.clone(),
+                length: raw.chars().count(),
+            },
+            truncated,
+            policy: PolicyInfo {
+                head: state.policy.head,
+                tail: state.policy.tail,
+                full_if_lte: state.policy.full_if_lte,
+            },
+            tools_allowed: d.tools_allowed,
+            risk_level: d.risk_level,
+            action: d.action,
+            fenced_content: d.fenced_content,
+            reasons: d.reasons,
+            detected_patterns: d.detected_patterns,
+        };
+
+        return (StatusCode::OK, Json(resp)).into_response();
+    }
+
     let http = state.http.clone();
 
     let l1: Box<dyn sentry::ModelClient> = match policy.l1.provider {
