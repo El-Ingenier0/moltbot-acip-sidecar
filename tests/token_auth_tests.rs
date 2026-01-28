@@ -1,16 +1,7 @@
-use axum::{
-    body::Body,
-    http::{Request, StatusCode},
-    routing::get,
-    Router,
-};
-use moltbot_acip_sidecar::{policy_store, routes, secrets, state, token_auth};
+use axum::{body::Body, http::{Request, StatusCode}, Router};
+use moltbot_acip_sidecar::{app, policy_store, secrets, state};
 use std::sync::Arc;
 use tower::ServiceExt;
-
-async fn health() -> &'static str {
-    "ok"
-}
 
 fn app_with_token(token: Option<String>) -> Router {
     let mut policies = std::collections::BTreeMap::new();
@@ -30,15 +21,7 @@ fn app_with_token(token: Option<String>) -> Router {
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),
     });
 
-    let protected = token_auth::with_token_auth(
-        Router::new().route("/v1/acip/schema", get(routes::get_schema)),
-        token,
-    );
-
-    Router::new()
-        .route("/health", get(health))
-        .merge(protected)
-        .with_state(st)
+    app::build_router(st, token, Router::new())
 }
 
 #[tokio::test]

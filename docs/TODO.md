@@ -12,7 +12,7 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 
 ## P2 (medium)
 - [x] **Use config values for `policies_file`** instead of `let _ = ...` placeholder; i.e., make config authoritative default while CLI overrides.
-- [ ] **Centralize router construction** (avoid duplication between main/tests; easier future security hardening).
+- [x] **Centralize router construction** (avoid duplication between main/tests; easier future security hardening).
 - [x] **Improve JSON extraction** in `sentry::extract_json_only` (current brace-slicing is brittle); consider strict JSON mode or a more robust parser strategy.
 - [x] **Reduce prompt bloat**: `DecisionEngine::build_prompt` includes full schema each call; consider caching schema text or using shorter schema reference.
 

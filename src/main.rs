@@ -1,8 +1,8 @@
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{get, post},
+    routing::post,
     Json, Router,
 };
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -13,15 +13,17 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-mod config;
-mod introspection;
-mod model_policy;
-mod policy_store;
-mod routes;
-mod secrets;
-mod sentry;
-mod state;
-mod token_auth;
+use moltbot_acip_sidecar::{
+    app,
+    config,
+    introspection,
+    model_policy,
+    policy_store,
+    routes,
+    secrets,
+    sentry,
+    state,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -219,10 +221,6 @@ fn groupname_from_gid(gid: libc::gid_t) -> anyhow::Result<String> {
     }
 }
 
-
-async fn health() -> impl IntoResponse {
-    (StatusCode::OK, "ok")
-}
 
 async fn ingest_source(
     State(state): State<Arc<state::AppState>>,
@@ -621,21 +619,8 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Apply token auth and body size limits to protected routes.
-    let protected = token_auth::with_token_auth(
-        Router::new()
-            .route("/v1/acip/ingest_source", post(ingest_source))
-            .route("/v1/acip/schema", get(routes::get_schema))
-            .route("/v1/acip/policies", get(routes::list_policies))
-            .route("/v1/acip/policy", get(routes::get_policy))
-            // Limit request bodies (JSON + base64) to reduce DoS risk.
-            .layer(DefaultBodyLimit::max(1_500_000)),
-        token_opt.clone(),
-    );
-
-    let app = Router::new()
-        .route("/health", get(health))
-        .merge(protected)
-        .with_state(state);
+    let extra_protected = Router::new().route("/v1/acip/ingest_source", post(ingest_source));
+    let app = app::build_router(state, token_opt.clone(), extra_protected);
 
     let addr: SocketAddr = format!("{}:{}", effective_host, effective_port).parse()?;
     info!("listening on http://{}", addr);
