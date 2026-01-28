@@ -10,6 +10,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 mod config;
@@ -307,7 +308,8 @@ async fn ingest_source(
         }
     };
 
-    let http = reqwest::Client::new();
+    let http = state.http.clone();
+
     let l1: Box<dyn sentry::ModelClient> = match policy.l1.provider {
         model_policy::Provider::Gemini => Box::new(sentry::GeminiClient::new(
             http.clone(),
@@ -537,6 +539,11 @@ async fn main() -> anyhow::Result<()> {
         info!("auth token required");
     }
 
+    let http = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(30))
+        .build()?;
+
     // Policy store: load from policies.json when provided, otherwise fall back
     // to env-configured single 'default' policy.
     let policies = if let Some(policies_path) = &args.policies_file {
@@ -595,6 +602,7 @@ async fn main() -> anyhow::Result<()> {
             tail: effective_tail,
             full_if_lte: effective_full_if_lte,
         },
+        http,
         secrets,
         policies,
     });

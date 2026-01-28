@@ -1,4 +1,5 @@
 use crate::{policy_store::PolicyStore, secrets};
+use reqwest::Client;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -11,6 +12,7 @@ pub struct Policy {
 #[derive(Clone)]
 pub struct AppState {
     pub policy: Policy,
+    pub http: Client,
     pub secrets: Arc<dyn secrets::SecretStore>,
     pub policies: PolicyStore,
 }

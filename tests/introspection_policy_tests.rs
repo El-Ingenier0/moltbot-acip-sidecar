@@ -28,6 +28,7 @@ fn app_with_policies(names: &[&str]) -> Router {
             tail: 4000,
             full_if_lte: 9000,
         },
+        http: reqwest::Client::new(),
         secrets: Arc::new(moltbot_acip_sidecar::secrets::EnvStore),
         policies: store,
     });
