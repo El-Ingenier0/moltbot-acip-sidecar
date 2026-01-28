@@ -40,6 +40,12 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 - [ ] **Tests**: unit tests for taxonomy + detectors + reputation bumping.
 - [ ] **Integration tests (attack suite)**: add HTTP-level tests that POST /v1/acip/ingest_source with a corpus of attack fixtures (prompt injection, tool coercion, exfiltration, credential theft, jailbreak/social engineering) and assert invariants (e.g., tools hard-caps; risk escalation; threat fields populated).
 
+## Installation & ops (MVP)
+- [ ] **Create install guide**: prerequisites, build/run, config paths, secrets file, policies file.
+- [ ] **Provide systemd unit template**: /etc/acip paths, service user/group, restart policy.
+- [ ] **Add install script** (best-effort): builds binary, creates user/group, writes unit + config example (no secrets), enables service.
+- [ ] **Smoke test instructions**: curl health + ingest example.
+
 ## P3 (low)
 - [x] **Make `config.example.toml` match actual config schema fully** (document remaining keys as added).
 - [x] **Docs**: explain loopback default behavior and how token requirement changes when `allow_insecure_loopback=false`.
