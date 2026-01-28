@@ -19,6 +19,14 @@ Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
 ## Security follow-ups (post-MVP)
 - [ ] **Safe PDF/SVG ingestion architecture**: if/when we add PDF rendering or SVG parsing, run it in a separate sandboxed process (no network, tight CPU/mem/time limits) to mitigate parser/rendering memory-corruption risk; then treat extracted text as untrusted (prompt-injection).
 
+## MVP+: safer HTML/SVG handling before model exposure
+- [ ] **Add content normalization pipeline**: keep original raw for digest/audit, but generate a separate `model_text` for sentry decisions.
+- [ ] **HTML → structured text conversion** (minimally lossy): convert HTML to readable text/markdown-ish while preserving headings/lists/links as best we can.
+- [ ] **Drop active HTML content**: ensure scripts/styles/iframes don’t make it into model_text; remove obvious JS URLs (e.g. `javascript:`).
+- [ ] **SVG input handling**: treat as markup; extract visible text nodes only (no script) into model_text.
+- [ ] **Plumb audit metadata**: add response fields indicating `normalized=true`, original/extracted lengths, and a list of removed elements/patterns.
+- [ ] **Tests**: add fixtures for HTML with script prompt injection and ensure model_text excludes script content.
+
 ## P3 (low)
 - [x] **Make `config.example.toml` match actual config schema fully** (document remaining keys as added).
 - [x] **Docs**: explain loopback default behavior and how token requirement changes when `allow_insecure_loopback=false`.
