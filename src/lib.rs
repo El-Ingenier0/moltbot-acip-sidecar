@@ -1,3 +1,4 @@
+pub mod config;
 pub mod introspection;
 pub mod model_policy;
 pub mod policy_store;

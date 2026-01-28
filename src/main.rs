@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
+mod config;
 mod introspection;
 mod model_policy;
 mod policy_store;
@@ -24,24 +25,24 @@ mod state;
 #[command(author, version, about)]
 struct Args {
     /// Bind host (default: 127.0.0.1)
-    #[arg(long, default_value = "127.0.0.1")]
-    host: String,
+    #[arg(long)]
+    host: Option<String>,
 
     /// Bind port (default: 18795)
-    #[arg(long, default_value_t = 18795)]
-    port: u16,
+    #[arg(long)]
+    port: Option<u16>,
 
     /// Max chars for head/tail policy head
-    #[arg(long, default_value_t = 4000)]
-    head: usize,
+    #[arg(long)]
+    head: Option<usize>,
 
     /// Max chars for head/tail policy tail
-    #[arg(long, default_value_t = 4000)]
-    tail: usize,
+    #[arg(long)]
+    tail: Option<usize>,
 
     /// If total <= this, include whole text (default: 9000)
-    #[arg(long, default_value_t = 9000)]
-    full_if_lte: usize,
+    #[arg(long)]
+    full_if_lte: Option<usize>,
 
     /// Optional secrets env file (must be private: parent 700-ish, file 600-ish).
     ///
@@ -54,6 +55,10 @@ struct Args {
     /// Recommended system path: `/etc/acip/policies.json`
     #[arg(long)]
     policies_file: Option<PathBuf>,
+
+    /// Config TOML file (default: /etc/acip/config.toml)
+    #[arg(long)]
+    config: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -284,11 +289,86 @@ async fn ingest_source(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    const DEFAULT_HOST: &str = "127.0.0.1";
+    const DEFAULT_PORT: u16 = 18795;
+    const DEFAULT_HEAD: usize = 4000;
+    const DEFAULT_TAIL: usize = 4000;
+    const DEFAULT_FULL_IF_LTE: usize = 9000;
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     let args = Args::parse();
+    let config_path = args
+        .config
+        .unwrap_or_else(|| PathBuf::from("/etc/acip/config.toml"));
+    let config = match config::Config::load(&config_path) {
+        Ok(cfg) => Some(cfg),
+        Err(e) => {
+            if let Some(ioe) = e.downcast_ref::<std::io::Error>() {
+                if ioe.kind() == std::io::ErrorKind::NotFound {
+                    info!("config file not found at {}; continuing", config_path.display());
+                    None
+                } else {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
+        }
+    };
+
+    let cfg_service = config.as_ref().and_then(|cfg| cfg.service.as_ref());
+    let cfg_server = config.as_ref().and_then(|cfg| cfg.server.as_ref());
+    let cfg_policy = config.as_ref().and_then(|cfg| cfg.policy.as_ref());
+    let cfg_security = config.as_ref().and_then(|cfg| cfg.security.as_ref());
+
+    let _ = cfg_service.and_then(|svc| svc.user.as_ref());
+    let _ = cfg_service.and_then(|svc| svc.group.as_ref());
+    let _ = cfg_security.and_then(|sec| sec.allow_insecure_loopback);
+    let _ = cfg_policy.and_then(|policy| policy.policies_file.as_ref());
+
+    let effective_host = if let Some(host) = args.host.clone() {
+        host
+    } else if let Some(host) = cfg_server.and_then(|server| server.host.clone()) {
+        host
+    } else {
+        DEFAULT_HOST.to_string()
+    };
+
+    let effective_port = if let Some(port) = args.port {
+        port
+    } else if let Some(port) = cfg_server.and_then(|server| server.port) {
+        port
+    } else {
+        DEFAULT_PORT
+    };
+
+    let effective_head = if let Some(head) = args.head {
+        head
+    } else if let Some(head) = cfg_policy.and_then(|policy| policy.head) {
+        head
+    } else {
+        DEFAULT_HEAD
+    };
+
+    let effective_tail = if let Some(tail) = args.tail {
+        tail
+    } else if let Some(tail) = cfg_policy.and_then(|policy| policy.tail) {
+        tail
+    } else {
+        DEFAULT_TAIL
+    };
+
+    let effective_full_if_lte = if let Some(full_if_lte) = args.full_if_lte {
+        full_if_lte
+    } else if let Some(full_if_lte) = cfg_policy.and_then(|policy| policy.full_if_lte) {
+        full_if_lte
+    } else {
+        DEFAULT_FULL_IF_LTE
+    };
+
 
     // Secrets: secrets file (optional) + env fallback.
     let secrets: Arc<dyn secrets::SecretStore> = if let Some(path) = &args.secrets_file {
@@ -360,9 +440,9 @@ async fn main() -> anyhow::Result<()> {
 
     let state = Arc::new(state::AppState {
         policy: state::Policy {
-            head: args.head,
-            tail: args.tail,
-            full_if_lte: args.full_if_lte,
+            head: effective_head,
+            tail: effective_tail,
+            full_if_lte: effective_full_if_lte,
         },
         secrets,
         policies,
@@ -376,7 +456,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/acip/policy", get(routes::get_policy))
         .with_state(state);
 
-    let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;
+    let addr: SocketAddr = format!("{}:{}", effective_host, effective_port).parse()?;
     info!("listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

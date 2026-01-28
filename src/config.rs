@@ -1,0 +1,44 @@
+use anyhow::Result;
+use serde::Deserialize;
+use std::path::Path;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    pub service: Option<ServiceConfig>,
+    pub server: Option<ServerConfig>,
+    pub policy: Option<PolicyConfig>,
+    pub security: Option<SecurityConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServiceConfig {
+    pub user: Option<String>,
+    pub group: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServerConfig {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PolicyConfig {
+    pub policies_file: Option<String>,
+    pub head: Option<usize>,
+    pub tail: Option<usize>,
+    pub full_if_lte: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecurityConfig {
+    pub allow_insecure_loopback: Option<bool>,
+}
+
+impl Config {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        let raw = std::fs::read_to_string(path.as_ref())?;
+        let cfg: Self = toml::from_str(&raw)?;
+        Ok(cfg)
+    }
+}
