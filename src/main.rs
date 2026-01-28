@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
@@ -261,11 +261,18 @@ async fn ingest_source(
         bytes_b64,
     } = req;
 
+    // Basic DoS protection: cap base64 payload size before decoding.
+    // (There is also an HTTP body limit at the router layer.)
+    const MAX_BYTES_B64_CHARS: usize = 1_500_000; // ~1.1MB decoded
+
     let mut raw = None;
 
     if let Some(t) = text {
         raw = Some(t);
     } else if let Some(b64) = bytes_b64 {
+        if b64.len() > MAX_BYTES_B64_CHARS {
+            return (StatusCode::PAYLOAD_TOO_LARGE, "bytes_b64 too large").into_response();
+        }
         match B64.decode(b64.as_bytes()) {
             Ok(bytes) => match String::from_utf8(bytes) {
                 Ok(s) => raw = Some(s),
@@ -607,12 +614,15 @@ async fn main() -> anyhow::Result<()> {
         policies,
     });
 
+    // Apply token auth and body size limits to protected routes.
     let protected = token_auth::with_token_auth(
         Router::new()
             .route("/v1/acip/ingest_source", post(ingest_source))
             .route("/v1/acip/schema", get(routes::get_schema))
             .route("/v1/acip/policies", get(routes::list_policies))
-            .route("/v1/acip/policy", get(routes::get_policy)),
+            .route("/v1/acip/policy", get(routes::get_policy))
+            // Limit request bodies (JSON + base64) to reduce DoS risk.
+            .layer(DefaultBodyLimit::max(1_500_000)),
         token_opt.clone(),
     );
 
