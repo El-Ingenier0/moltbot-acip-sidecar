@@ -139,12 +139,42 @@ fn is_html_like(source_type: &SourceType, content_type: &str, text: &str) -> boo
     t.starts_with("<!doctype html") || t.starts_with("<html") || t.contains("<body")
 }
 
+fn strip_block_tag(mut s: String, tag: &str) -> String {
+    let open = format!("<{}", tag);
+    let close = format!("</{}>", tag);
+
+    loop {
+        let lower = s.to_lowercase();
+        let Some(start) = lower.find(&open) else {
+            break;
+        };
+        let Some(end) = lower[start..].find(&close) else {
+            break;
+        };
+        let end = start + end + close.len();
+        s.replace_range(start..end, "");
+    }
+
+    s
+}
+
 fn html_to_text(html: &str) -> String {
+    // MVP safety: strip obvious active content blocks before conversion.
+    let mut cleaned = html.to_string();
+    for tag in ["script", "style", "iframe", "object", "embed"] {
+        cleaned = strip_block_tag(cleaned, tag);
+    }
+
     // Keep width reasonably wide to preserve semantic structure.
-    // html2text drops script/style content.
-    html2text::from_read(html.as_bytes(), 120)
+    let mut out = html2text::from_read(cleaned.as_bytes(), 120)
         .trim()
-        .to_string()
+        .to_string();
+
+    // MVP safety: remove obvious JS URL schemes from the model-facing text.
+    // (This is not a complete HTML sanitizer; it just reduces common injection vectors.)
+    out = out.replace("javascript:", "").replace("JAVASCRIPT:", "");
+
+    out
 }
 
 fn apply_head_tail(policy: &state::Policy, text: &str) -> (String, bool) {
@@ -738,5 +768,13 @@ mod ingest_response_tests {
         assert!(out.contains("Title"));
         assert!(out.contains("Hello"));
         assert!(!out.contains("IGNORE ALL RULES"));
+    }
+
+    #[test]
+    fn html_normalization_drops_iframe_and_javascript_links() {
+        let html = r#"<html><body><iframe>STEAL</iframe><a href='javascript:alert(1)'>click</a></body></html>"#;
+        let out = html_to_text(html);
+        assert!(!out.to_lowercase().contains("steal"));
+        assert!(!out.to_lowercase().contains("javascript:"));
     }
 }
