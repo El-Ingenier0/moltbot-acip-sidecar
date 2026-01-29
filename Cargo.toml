@@ -29,6 +29,7 @@ dotenvy = "0.15"
 async-trait = "0.1"
 once_cell = "1"
 aho-corasick = "1"
+wait-timeout = "0.2"
 
 [dev-dependencies]
 serial_test = "3"

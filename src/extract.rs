@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 use tempfile::tempdir;
+use wait_timeout::ChildExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -296,7 +297,11 @@ pub fn extract(req: &ExtractRequest, bytes: &[u8]) -> Result<ExtractResponse> {
 
 /// Spawn the external extractor helper (`acip-extract`) and return its JSON response.
 ///
-/// Linux-only v1: this is a wrapper point where we will add seccomp/namespaces.
+/// Linux-only v1 sandboxing (pure Rust):
+/// - set rlimits (cpu/as/nofile)
+/// - set PR_SET_NO_NEW_PRIVS
+/// - set PR_SET_PDEATHSIG=SIGKILL
+/// - kill helper on timeout
 pub fn run_helper(
     req: &ExtractRequest,
     bytes: &[u8],
@@ -304,39 +309,99 @@ pub fn run_helper(
 ) -> Result<ExtractResponse> {
     let bin = std::env::var("ACIP_EXTRACTOR_BIN").unwrap_or_else(|_| "acip-extract".to_string());
 
-    let mut child = Command::new(bin)
+    let mut cmd = Command::new(bin);
+    cmd.env_clear()
+        .env("PATH", "/usr/bin:/bin")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("spawn acip-extract")?;
+        .stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+
+        let timeout_for_child = timeout;
+        cmd.pre_exec(move || {
+            let cpu_secs = timeout_for_child.as_secs().saturating_add(5).max(1);
+
+            let as_bytes: u64 = std::env::var("ACIP_EXTRACTOR_RLIMIT_AS_MB")
+                .ok()
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .unwrap_or(2048)
+                * 1024
+                * 1024;
+
+            let nofile: u64 = std::env::var("ACIP_EXTRACTOR_RLIMIT_NOFILE")
+                .ok()
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .unwrap_or(64);
+
+            fn setrlim(
+                resource: libc::__rlimit_resource_t,
+                cur: u64,
+                max: u64,
+            ) -> std::io::Result<()> {
+                let lim = libc::rlimit {
+                    rlim_cur: cur as libc::rlim_t,
+                    rlim_max: max as libc::rlim_t,
+                };
+                let rc = unsafe { libc::setrlimit(resource, &lim) };
+                if rc != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            }
+
+            setrlim(libc::RLIMIT_CPU, cpu_secs, cpu_secs)?;
+            setrlim(libc::RLIMIT_AS, as_bytes, as_bytes)?;
+            setrlim(libc::RLIMIT_NOFILE, nofile, nofile)?;
+
+            let rc = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+            if rc != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            let rc = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
+            if rc != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            Ok(())
+        });
+    }
+
+    let mut child = cmd.spawn().context("spawn acip-extract")?;
 
     let stdin = child
         .stdin
         .as_mut()
         .ok_or_else(|| anyhow!("missing stdin"))?;
 
-    // protocol: first line is JSON request, then raw bytes.
     let header = serde_json::to_string(req).context("serialize request")?;
     stdin.write_all(header.as_bytes()).context("write header")?;
     stdin.write_all(b"\n").context("write header newline")?;
     stdin.write_all(bytes).context("write payload")?;
-
-    // Drop stdin to signal EOF.
     drop(child.stdin.take());
 
-    // Wait with a timeout (best-effort). We implement timeout outside via tokio in HTTP handler.
-    // Here we just block; caller can place this in spawn_blocking + timeout.
-    let out = child.wait_with_output().context("wait acip-extract")?;
+    let Some(status) = child
+        .wait_timeout(timeout)
+        .context("wait_timeout acip-extract")?
+    else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(anyhow!("acip-extract timeout"));
+    };
 
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(&out.stderr);
+    let output = child
+        .wait_with_output()
+        .context("wait_with_output acip-extract")?;
+
+    if !status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow!("acip-extract failed: {}", err.trim()));
     }
 
     let resp: ExtractResponse =
-        serde_json::from_slice(&out.stdout).context("parse extract json")?;
-    // silence unused warning for timeout param until we wire tokio timeout here.
-    let _ = timeout;
+        serde_json::from_slice(&output.stdout).context("parse extract json")?;
     Ok(resp)
 }
