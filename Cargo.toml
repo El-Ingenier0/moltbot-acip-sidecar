@@ -33,6 +33,8 @@ wait-timeout = "0.2"
 
 [dev-dependencies]
 serial_test = "3"
+assert_cmd = "2"
+predicates = "3"
 tower = "0.5"
 http-body-util = "0.1"
 
