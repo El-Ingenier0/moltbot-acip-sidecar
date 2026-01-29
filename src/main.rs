@@ -641,12 +641,6 @@ async fn ingest_source(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    const DEFAULT_HOST: &str = "127.0.0.1";
-    const DEFAULT_PORT: u16 = 18795;
-    const DEFAULT_HEAD: usize = 4000;
-    const DEFAULT_TAIL: usize = 4000;
-    const DEFAULT_FULL_IF_LTE: usize = 9000;
-
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -675,66 +669,35 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let cfg_service = config.as_ref().and_then(|cfg| cfg.service.as_ref());
-    let cfg_server = config.as_ref().and_then(|cfg| cfg.server.as_ref());
-    let cfg_policy = config.as_ref().and_then(|cfg| cfg.policy.as_ref());
-    let cfg_security = config.as_ref().and_then(|cfg| cfg.security.as_ref());
 
-    let _ = cfg_service.and_then(|svc| svc.user.as_ref());
-    let _ = cfg_service.and_then(|svc| svc.group.as_ref());
-    let _ = cfg_policy.and_then(|policy| policy.policies_file.as_ref());
-
-    let allow_insecure_loopback = cfg_security
-        .and_then(|sec| sec.allow_insecure_loopback)
-        .unwrap_or(true);
-    let require_token_setting = cfg_security
-        .and_then(|sec| sec.require_token)
-        .unwrap_or(true);
-    let token_env = cfg_security
-        .and_then(|sec| sec.token_env.as_deref())
-        .unwrap_or("ACIP_AUTH_TOKEN");
-
-    let effective_host = if let Some(host) = args.host.clone() {
-        host
-    } else if let Some(host) = cfg_server.and_then(|server| server.host.clone()) {
-        host
-    } else {
-        DEFAULT_HOST.to_string()
+    let cli = moltbot_acip_sidecar::server_config::CliOverrides {
+        host: args.host.clone(),
+        port: args.port,
+        head: args.head,
+        tail: args.tail,
+        full_if_lte: args.full_if_lte,
+        policies_file: args.policies_file.clone(),
     };
 
-    let ip: std::net::IpAddr = effective_host.parse()?;
-    let token_required = (!ip.is_loopback() || !allow_insecure_loopback) && require_token_setting;
+    let eff = moltbot_acip_sidecar::server_config::effective_settings(&cli, config.as_ref());
 
-    let effective_port = if let Some(port) = args.port {
-        port
-    } else if let Some(port) = cfg_server.and_then(|server| server.port) {
-        port
-    } else {
-        DEFAULT_PORT
-    };
+    let allow_insecure_loopback =
+        moltbot_acip_sidecar::server_config::allow_insecure_loopback(config.as_ref());
+    let require_token_setting =
+        moltbot_acip_sidecar::server_config::require_token_setting(config.as_ref());
+    let token_env = moltbot_acip_sidecar::server_config::token_env(config.as_ref());
 
-    let effective_head = if let Some(head) = args.head {
-        head
-    } else if let Some(head) = cfg_policy.and_then(|policy| policy.head) {
-        head
-    } else {
-        DEFAULT_HEAD
-    };
+    let token_required = moltbot_acip_sidecar::server_config::compute_token_required(
+        &eff.host,
+        allow_insecure_loopback,
+        require_token_setting,
+    )?;
 
-    let effective_tail = if let Some(tail) = args.tail {
-        tail
-    } else if let Some(tail) = cfg_policy.and_then(|policy| policy.tail) {
-        tail
-    } else {
-        DEFAULT_TAIL
-    };
-
-    let effective_full_if_lte = if let Some(full_if_lte) = args.full_if_lte {
-        full_if_lte
-    } else if let Some(full_if_lte) = cfg_policy.and_then(|policy| policy.full_if_lte) {
-        full_if_lte
-    } else {
-        DEFAULT_FULL_IF_LTE
-    };
+    let effective_host = eff.host;
+    let effective_port = eff.port;
+    let effective_head = eff.head;
+    let effective_tail = eff.tail;
+    let effective_full_if_lte = eff.full_if_lte;
 
     if let Some(service) = cfg_service {
         let enforce_identity = service.enforce_identity.unwrap_or(true);
@@ -788,7 +751,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let token_opt = if token_required {
-        match secrets.get(token_env) {
+        match secrets.get(&token_env) {
             Some(token) if !token.trim().is_empty() => Some(token),
             _ => {
                 anyhow::bail!(
@@ -819,11 +782,7 @@ async fn main() -> anyhow::Result<()> {
     // Policy store: load from policies.json when provided, otherwise fall back
     // to env-configured single 'default' policy.
 
-    let effective_policies_file: Option<PathBuf> = args.policies_file.clone().or_else(|| {
-        cfg_policy
-            .and_then(|pol| pol.policies_file.as_ref())
-            .map(PathBuf::from)
-    });
+    let effective_policies_file: Option<PathBuf> = eff.policies_file.clone();
 
     let policies = if let Some(policies_path) = &effective_policies_file {
         let pf = policy_store::PoliciesFile::load(policies_path)?;

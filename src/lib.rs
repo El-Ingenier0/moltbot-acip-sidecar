@@ -11,6 +11,7 @@ pub mod reputation_policy;
 pub mod routes;
 pub mod secrets;
 pub mod sentry;
+pub mod server_config;
 pub mod state;
 pub mod threat;
 pub mod token_auth;
