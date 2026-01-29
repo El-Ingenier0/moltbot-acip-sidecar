@@ -1,30 +1,29 @@
-use predicates::prelude::*;
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+mod util;
 
-fn bin() -> &'static str {
-    env!("CARGO_BIN_EXE_moltbot-acip-sidecar")
-}
+use predicates::prelude::*;
+use std::{fs, os::unix::fs::PermissionsExt};
 
 #[test]
 fn binary_help_works() {
-    let out = Command::new(bin()).arg("--help").output().unwrap();
+    let out = std::process::Command::new(util::bin::bin_path())
+        .arg("--help")
+        .output()
+        .unwrap();
     assert!(out.status.success());
 }
 
 #[test]
 fn missing_config_file_is_not_fatal_up_to_start() {
     // We can't let it serve indefinitely in a test; start it and then kill it.
-    let mut child = Command::new(bin())
-        .args(["--config", "/definitely/not/here/config.toml"])
+    let mut cmd = util::bin::cmd();
+    cmd.args(["--config", "/definitely/not/here/config.toml"])
         .args(["--host", "127.0.0.1"]) // loopback -> token not required by default
         .args(["--port", "0"]) // ephemeral
-        .env("RUST_LOG", "info")
-        .spawn()
-        .unwrap();
+        .env("RUST_LOG", "info");
 
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let _ = child.kill();
-    let _ = child.wait();
+    let mut child = util::bin::ManagedChild::spawn(cmd).unwrap();
+    child.wait_for(std::time::Duration::from_millis(300));
+    child.kill();
 }
 
 #[test]
@@ -58,7 +57,7 @@ token_env = "ACIP_AUTH_TOKEN"
     dperms.set_mode(0o700);
     fs::set_permissions(dir.path(), dperms).unwrap();
 
-    let out = Command::new(bin())
+    let out = std::process::Command::new(util::bin::bin_path())
         .args(["--config", cfg_path.to_str().unwrap()])
         .args(["--secrets-file", secrets_path.to_str().unwrap()])
         .output()
