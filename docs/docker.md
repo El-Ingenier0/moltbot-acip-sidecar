@@ -72,6 +72,7 @@ You can tune limits via env:
 - `ACIP_EXTRACTOR_RLIMIT_FSIZE_MB`
 - `ACIP_EXTRACTOR_NICE`
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (opt-in)
+- `ACIP_EXTRACTOR_TMPDIR` (optional)
 
 ## Smoke test
 

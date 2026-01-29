@@ -71,6 +71,7 @@ Same knobs as system install (see `docs/install.md`), typically set via `systemc
 - `ACIP_EXTRACTOR_RLIMIT_FSIZE_MB`
 - `ACIP_EXTRACTOR_NICE`
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (opt-in)
+- `ACIP_EXTRACTOR_TMPDIR` (optional)
 
 ## Smoke test
 

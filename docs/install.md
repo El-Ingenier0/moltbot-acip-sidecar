@@ -118,6 +118,7 @@ These env vars tune the **out-of-process extractor** (PDF/SVG hybrid extraction)
 - `ACIP_EXTRACTOR_RLIMIT_FSIZE_MB` (default: `512`): max file size helper may create
 - `ACIP_EXTRACTOR_NICE` (default: `10`): niceness increment
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (optional): cap processes/threads (opt-in; can break some tools)
+- `ACIP_EXTRACTOR_TMPDIR` (optional): override temp directory for extractor (OCR writes images here)
 
 ## Notes
 

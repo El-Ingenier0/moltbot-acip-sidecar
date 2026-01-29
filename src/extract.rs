@@ -328,10 +328,14 @@ pub fn run_helper(
 ) -> std::result::Result<ExtractResponse, ExtractorError> {
     let bin = std::env::var("ACIP_EXTRACTOR_BIN").unwrap_or_else(|_| "acip-extract".to_string());
 
+    let tmpdir = std::env::var("ACIP_EXTRACTOR_TMPDIR").unwrap_or_else(|_| "".to_string());
+
     let mut cmd = Command::new(bin);
-    cmd.env_clear()
-        .env("PATH", "/usr/bin:/bin")
-        .stdin(Stdio::piped())
+    cmd.env_clear().env("PATH", "/usr/bin:/bin");
+    if !tmpdir.trim().is_empty() {
+        cmd.env("TMPDIR", tmpdir);
+    }
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
