@@ -339,6 +339,15 @@ pub async fn ingest_source(
         let resp = match tokio::time::timeout(extractor_timeout, join).await {
             Ok(Ok(Ok(r))) => r,
             Ok(Ok(Err(e))) => {
+                let msg = e.to_string();
+                if msg.contains("timeout") {
+                    return (
+                        StatusCode::REQUEST_TIMEOUT,
+                        format!("extract_timeout ({kind:?})"),
+                    )
+                        .into_response();
+                }
+
                 return (
                     StatusCode::BAD_REQUEST,
                     format!("extract_failed ({kind:?}): {e}"),

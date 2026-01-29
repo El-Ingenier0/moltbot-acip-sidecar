@@ -356,6 +356,30 @@ pub fn run_helper(
             setrlim(libc::RLIMIT_AS, as_bytes, as_bytes)?;
             setrlim(libc::RLIMIT_NOFILE, nofile, nofile)?;
 
+            // Best-effort scheduler/IO deprioritization.
+            // nice: increase niceness (lower priority)
+            let nice_inc: i32 = std::env::var("ACIP_EXTRACTOR_NICE")
+                .ok()
+                .and_then(|v| v.trim().parse::<i32>().ok())
+                .unwrap_or(10);
+            let _ = libc::nice(nice_inc);
+
+            // ioprio_set: put into idle IO class when available (Linux).
+            #[cfg(target_os = "linux")]
+            {
+                const IOPRIO_CLASS_IDLE: u64 = 3;
+                const IOPRIO_WHO_PROCESS: u64 = 1;
+                // ioprio = (class << 13) | data
+                let ioprio: u64 = IOPRIO_CLASS_IDLE << 13;
+                // syscall(SYS_ioprio_set, which, who, ioprio)
+                let _ = libc::syscall(
+                    libc::SYS_ioprio_set as libc::c_long,
+                    IOPRIO_WHO_PROCESS,
+                    0u64,
+                    ioprio,
+                );
+            }
+
             let rc = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
             if rc != 0 {
                 return Err(std::io::Error::last_os_error());
