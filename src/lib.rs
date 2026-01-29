@@ -1,5 +1,6 @@
 pub mod app;
 pub mod config;
+pub mod extract;
 pub mod ingest;
 pub mod introspection;
 pub mod model_policy;

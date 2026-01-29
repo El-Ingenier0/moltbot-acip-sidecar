@@ -609,7 +609,8 @@ async fn ingest_source(
 
     let decision = enforce_markup_tools_cap(decision, is_markup);
     let decision = enforce_tools_authorization(decision, allow_tools);
-    let decision = reputation_policy::apply_reputation(decision, allow_tools, &recs, &rep_thresholds);
+    let decision =
+        reputation_policy::apply_reputation(decision, allow_tools, &recs, &rep_thresholds);
 
     let resp = IngestResponse {
         digest: DigestInfo {

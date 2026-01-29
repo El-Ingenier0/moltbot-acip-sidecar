@@ -1,5 +1,5 @@
 use crate::{
-    introspection, reputation, reputation_policy, routes, sentry, state, threat, xml_scan,
+    extract, introspection, reputation, reputation_policy, routes, sentry, state, threat, xml_scan,
 };
 use axum::{
     extract::State,
@@ -271,23 +271,22 @@ pub async fn ingest_source(
     // Basic DoS protection: cap base64 payload size before decoding.
     const MAX_BYTES_B64_CHARS: usize = 1_500_000; // ~1.1MB decoded
 
-    let mut raw: Option<String> = None;
+    // We keep both a text view (when available) and raw bytes (for PDFs).
+    let mut raw_text: Option<String> = None;
+    let mut raw_bytes: Option<Vec<u8>> = None;
 
     if let Some(t) = text {
-        raw = Some(t);
+        raw_text = Some(t.clone());
+        raw_bytes = Some(t.into_bytes());
     } else if let Some(b64) = bytes_b64 {
         if b64.len() > MAX_BYTES_B64_CHARS {
             return (StatusCode::PAYLOAD_TOO_LARGE, "bytes_b64 too large").into_response();
         }
         match B64.decode(b64.as_bytes()) {
-            Ok(bytes) => match String::from_utf8(bytes) {
-                Ok(s) => raw = Some(s),
-                Err(e) => {
-                    error!("bytes_b64 not valid utf8: {e}");
-                    return (StatusCode::BAD_REQUEST, "bytes_b64 must be UTF-8 for v0.1")
-                        .into_response();
-                }
-            },
+            Ok(bytes) => {
+                raw_text = String::from_utf8(bytes.clone()).ok();
+                raw_bytes = Some(bytes);
+            }
             Err(e) => {
                 error!("base64 decode failed: {e}");
                 return (StatusCode::BAD_REQUEST, "invalid base64").into_response();
@@ -295,13 +294,298 @@ pub async fn ingest_source(
         }
     }
 
-    let Some(raw) = raw else {
+    let Some(input_bytes) = raw_bytes.clone() else {
         return (StatusCode::BAD_REQUEST, "must provide text or bytes_b64").into_response();
     };
 
+    let raw = raw_text.unwrap_or_default();
+
     let mut hasher = Sha256::new();
-    hasher.update(raw.as_bytes());
+    hasher.update(&input_bytes);
     let sha = hex::encode(hasher.finalize());
+
+    let ct_lower = content_type.to_lowercase();
+    let is_pdf = ct_lower.contains("application/pdf") || matches!(source_type, SourceType::Pdf);
+    let is_svg_ct = ct_lower.contains("image/svg");
+
+    // PDF/SVG extraction is out-of-process (Linux-only v1).
+    if is_pdf || is_svg_ct {
+        let kind = if is_pdf {
+            extract::ExtractKind::Pdf
+        } else {
+            extract::ExtractKind::Svg
+        };
+
+        let req = extract::ExtractRequest {
+            kind: kind.clone(),
+            content_type: Some(content_type.clone()),
+            max_pages: Some(100),
+            dpi: Some(250),
+            max_output_chars: Some(2_000_000),
+        };
+
+        // Run helper in a blocking task with a generous timeout.
+        let join = tokio::task::spawn_blocking(move || {
+            extract::run_helper(&req, &input_bytes, std::time::Duration::from_secs(180))
+        });
+
+        let resp = match tokio::time::timeout(std::time::Duration::from_secs(180), join).await {
+            Ok(Ok(Ok(r))) => r,
+            Ok(Ok(Err(e))) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("extract_failed ({kind:?}): {e}"),
+                )
+                    .into_response();
+            }
+            Ok(Err(e)) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!("extract_join_failed ({kind:?}): {e}"),
+                )
+                    .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::REQUEST_TIMEOUT,
+                    format!("extract_timeout ({kind:?})"),
+                )
+                    .into_response();
+            }
+        };
+
+        // Treat extracted text as untrusted.
+        let model_text = resp.text;
+        let normalized = true;
+        let mut normalization_steps = vec!["sandbox_extract".to_string()];
+        normalization_steps.extend(resp.warnings.into_iter().map(|w| format!("extract:{w}")));
+
+        let original_length_chars = raw.chars().count();
+        let model_length_chars = model_text.chars().count();
+
+        let mut threat_full = threat::assess(&model_text);
+        for step in normalization_steps.iter() {
+            if step.starts_with("extract:") {
+                threat_full
+                    .indicators
+                    .push(step.replace("extract:", "extract_").to_string());
+            }
+        }
+
+        let audit_mode = std::env::var("ACIP_AUDIT_MODE")
+            .map(|v| v.trim().eq("ENABLED"))
+            .unwrap_or(false);
+
+        let mut threat = threat_full.clone();
+        if !audit_mode {
+            threat.indicators.clear();
+        }
+        let threat_audit = if audit_mode {
+            Some(threat_full.clone())
+        } else {
+            None
+        };
+
+        // Update reputation store.
+        let host = url
+            .as_deref()
+            .and_then(|u| u.split("//").nth(1))
+            .and_then(|rest| rest.split('/').next())
+            .map(|h| h.to_lowercase());
+        let recs = state.reputation.record(reputation::observation(
+            source_id.clone(),
+            host,
+            threat.threat_score,
+            threat
+                .attack_types
+                .iter()
+                .map(|t| format!("{:?}", t))
+                .collect(),
+        ));
+
+        let rep_thresholds = reputation_policy::ReputationThresholds::from_env();
+        let (trunc_text, truncated) = apply_head_tail(&state.policy, &model_text);
+
+        // Continue with the shared decision path.
+        let is_markup = true;
+
+        // Sentry mode:
+        let mode = std::env::var("ACIP_SENTRY_MODE").unwrap_or_else(|_| "live".to_string());
+        if mode.trim().eq_ignore_ascii_case("stub") {
+            let mut d = sentry::Decision::fail_closed(
+                fence_external(&trunc_text),
+                vec!["sentry disabled (ACIP_SENTRY_MODE=stub)".to_string()],
+            );
+            d = enforce_markup_tools_cap(d, is_markup);
+            d = enforce_tools_authorization(d, allow_tools);
+            d = reputation_policy::apply_reputation(d, allow_tools, &recs, &rep_thresholds);
+            d.risk_level = sentry::RiskLevel::Medium;
+            d.action = sentry::Action::Allow;
+
+            let resp = IngestResponse {
+                digest: DigestInfo {
+                    sha256: sha,
+                    length: raw.len(),
+                },
+                truncated,
+                policy: PolicyInfo {
+                    head: state.policy.head,
+                    tail: state.policy.tail,
+                    full_if_lte: state.policy.full_if_lte,
+                },
+                original_length_chars,
+                model_length_chars,
+                normalized,
+                normalization_steps,
+                threat,
+                threat_audit,
+                tools_allowed: d.tools_allowed,
+                risk_level: d.risk_level,
+                action: d.action,
+                fenced_content: d.fenced_content,
+                reasons: d.reasons,
+                detected_patterns: d.detected_patterns,
+            };
+
+            return (StatusCode::OK, Json(resp)).into_response();
+        }
+
+        if mode.trim().eq_ignore_ascii_case("stub-open") {
+            let mut d = sentry::Decision {
+                tools_allowed: true,
+                risk_level: sentry::RiskLevel::Low,
+                action: sentry::Action::Allow,
+                fenced_content: fence_external(&trunc_text),
+                reasons: vec!["sentry disabled (ACIP_SENTRY_MODE=stub-open)".to_string()],
+                detected_patterns: vec![],
+            };
+            d = enforce_markup_tools_cap(d, is_markup);
+            d = enforce_tools_authorization(d, allow_tools);
+            d = reputation_policy::apply_reputation(d, allow_tools, &recs, &rep_thresholds);
+
+            let resp = IngestResponse {
+                digest: DigestInfo {
+                    sha256: sha,
+                    length: raw.len(),
+                },
+                truncated,
+                policy: PolicyInfo {
+                    head: state.policy.head,
+                    tail: state.policy.tail,
+                    full_if_lte: state.policy.full_if_lte,
+                },
+                original_length_chars,
+                model_length_chars,
+                normalized,
+                normalization_steps,
+                threat,
+                threat_audit,
+                tools_allowed: d.tools_allowed,
+                risk_level: d.risk_level,
+                action: d.action,
+                fenced_content: d.fenced_content,
+                reasons: d.reasons,
+                detected_patterns: d.detected_patterns,
+            };
+
+            return (StatusCode::OK, Json(resp)).into_response();
+        }
+
+        // Live mode.
+        let policy_name = routes::policy_name_from_headers(&headers);
+        let policy = match state.policies.require(&policy_name) {
+            Ok(p) => p,
+            Err(_) => {
+                let mut names = state.policies.list();
+                names.sort();
+                return introspection::json_error(
+                    StatusCode::BAD_REQUEST,
+                    "unknown policy",
+                    serde_json::json!({"requested": policy_name, "available": names}),
+                )
+                .into_response();
+            }
+        };
+
+        let http = state.http.clone();
+        let l1: Box<dyn sentry::ModelClient> = match policy.l1.provider {
+            crate::model_policy::Provider::Gemini => Box::new(sentry::GeminiClient::new(
+                http.clone(),
+                state.secrets.clone(),
+            )),
+            crate::model_policy::Provider::Anthropic => Box::new(sentry::AnthropicClient::new(
+                http.clone(),
+                state.secrets.clone(),
+            )),
+        };
+        let l2: Box<dyn sentry::ModelClient> = match policy.l2.provider {
+            crate::model_policy::Provider::Gemini => Box::new(sentry::GeminiClient::new(
+                http.clone(),
+                state.secrets.clone(),
+            )),
+            crate::model_policy::Provider::Anthropic => Box::new(sentry::AnthropicClient::new(
+                http.clone(),
+                state.secrets.clone(),
+            )),
+        };
+        let engine = sentry::DecisionEngine::new(l1, l2);
+
+        let source_meta = serde_json::json!({
+            "source_id": source_id,
+            "source_type": format!("{:?}", source_type),
+            "content_type": content_type,
+            "url": url,
+            "title": title,
+            "turn_id": turn_id,
+            "digest_sha256": sha,
+            "original_length_chars": original_length_chars,
+            "model_length_chars": model_length_chars,
+            "truncated": truncated,
+            "threat": threat,
+        });
+
+        let decision = engine
+            .decide(
+                &policy_name,
+                &policy,
+                &source_meta,
+                &fence_external(&trunc_text),
+                &headers,
+            )
+            .await;
+
+        let decision = enforce_markup_tools_cap(decision, is_markup);
+        let decision = enforce_tools_authorization(decision, allow_tools);
+        let decision =
+            reputation_policy::apply_reputation(decision, allow_tools, &recs, &rep_thresholds);
+
+        let resp = IngestResponse {
+            digest: DigestInfo {
+                sha256: sha,
+                length: raw.len(),
+            },
+            truncated,
+            policy: PolicyInfo {
+                head: state.policy.head,
+                tail: state.policy.tail,
+                full_if_lte: state.policy.full_if_lte,
+            },
+            original_length_chars,
+            model_length_chars,
+            normalized,
+            normalization_steps,
+            threat,
+            threat_audit,
+            tools_allowed: decision.tools_allowed,
+            risk_level: decision.risk_level,
+            action: decision.action,
+            fenced_content: decision.fenced_content,
+            reasons: decision.reasons,
+            detected_patterns: decision.detected_patterns,
+        };
+
+        return (StatusCode::OK, Json(resp)).into_response();
+    }
 
     let is_html = is_html_like(&source_type, &content_type, &raw);
     let is_svg = is_svg_like(&content_type, &raw);
