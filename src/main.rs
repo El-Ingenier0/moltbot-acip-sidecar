@@ -14,7 +14,8 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
 use moltbot_acip_sidecar::{
-    app, config, introspection, model_policy, policy_store, routes, secrets, sentry, state, threat,
+    app, config, introspection, model_policy, policy_store, reputation, routes, secrets, sentry,
+    state, threat,
 };
 
 #[derive(Parser, Debug)]
@@ -472,7 +473,24 @@ async fn ingest_source(
         // Avoid oracle leakage to callers.
         threat.indicators.clear();
     }
-    let threat_audit = if audit_mode { Some(threat_full) } else { None };
+    let threat_audit = if audit_mode { Some(threat_full.clone()) } else { None };
+
+    // Update reputation store (best-effort, does not change decision yet).
+    let host = url
+        .as_deref()
+        .and_then(|u| u.split("//").nth(1))
+        .and_then(|rest| rest.split('/').next())
+        .map(|h| h.to_lowercase());
+    let _recs = state.reputation.record(reputation::observation(
+        source_id.clone(),
+        host,
+        threat.threat_score,
+        threat
+            .attack_types
+            .iter()
+            .map(|t| format!("{:?}", t))
+            .collect(),
+    ));
 
     let (trunc_text, truncated) = apply_head_tail(&state.policy, &model_text);
 
@@ -778,6 +796,16 @@ async fn main() -> anyhow::Result<()> {
         info!("auth token required");
     }
 
+    // Reputation store: pluggable backend behind a stable interface.
+    let reputation: std::sync::Arc<dyn reputation::ReputationStore> = {
+        let store = std::env::var("ACIP_REPUTATION_STORE").unwrap_or_else(|_| "memory".to_string());
+        if let Some(path) = store.strip_prefix("file:") {
+            std::sync::Arc::new(reputation::JsonFileReputationStore::load_or_create(path)?)
+        } else {
+            std::sync::Arc::new(reputation::InMemoryReputationStore::new())
+        }
+    };
+
     let http = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(30))
@@ -851,6 +879,7 @@ async fn main() -> anyhow::Result<()> {
         http,
         secrets,
         policies,
+        reputation,
     });
 
     // Apply token auth and body size limits to protected routes.

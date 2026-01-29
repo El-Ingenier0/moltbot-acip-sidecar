@@ -15,4 +15,5 @@ pub struct AppState {
     pub http: Client,
     pub secrets: Arc<dyn secrets::SecretStore>,
     pub policies: PolicyStore,
+    pub reputation: Arc<dyn crate::reputation::ReputationStore>,
 }

@@ -34,6 +34,7 @@ fn app_with_policies(names: &[&str]) -> Router {
         http: reqwest::Client::new(),
         secrets: Arc::new(moltbot_acip_sidecar::secrets::EnvStore),
         policies: store,
+        reputation: Arc::new(moltbot_acip_sidecar::reputation::InMemoryReputationStore::new()),
     });
 
     Router::new()

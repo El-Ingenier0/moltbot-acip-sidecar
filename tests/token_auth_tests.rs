@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use moltbot_acip_sidecar::{app, policy_store, secrets, state};
+use moltbot_acip_sidecar::{app, policy_store, reputation, secrets, state};
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -23,6 +23,7 @@ fn app_with_token(token: Option<String>) -> Router {
         http: reqwest::Client::new(),
         secrets: Arc::new(secrets::EnvStore),
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),
+        reputation: Arc::new(reputation::InMemoryReputationStore::new()),
     });
 
     app::build_router(st, token, Router::new())
