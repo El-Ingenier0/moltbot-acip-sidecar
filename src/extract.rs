@@ -132,7 +132,7 @@ pub fn extract_pdf_hybrid(req: &ExtractRequest, bytes: &[u8]) -> Result<ExtractR
 
             for img in entries {
                 // tesseract <image> stdout -l eng --dpi <dpi>
-                let out = Command::new("tesseract")
+                let out = match Command::new("tesseract")
                     .arg(img.as_os_str())
                     .arg("stdout")
                     .arg("-l")
@@ -142,7 +142,14 @@ pub fn extract_pdf_hybrid(req: &ExtractRequest, bytes: &[u8]) -> Result<ExtractR
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .output()
-                    .context("run tesseract")?;
+                {
+                    Ok(o) => o,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        warnings.push("tesseract_not_installed".to_string());
+                        break;
+                    }
+                    Err(e) => return Err(e).context("run tesseract"),
+                };
 
                 if !out.status.success() {
                     warnings.push("tesseract_failed".to_string());
@@ -189,10 +196,31 @@ pub fn extract_pdf_hybrid(req: &ExtractRequest, bytes: &[u8]) -> Result<ExtractR
 
 pub fn extract_svg_text(req: &ExtractRequest, bytes: &[u8]) -> Result<ExtractResponse> {
     let max_output_chars = req.max_output_chars.unwrap_or(500_000);
-    let raw = String::from_utf8(bytes.to_vec()).map_err(|_| anyhow!("svg must be utf-8"))?;
+    let raw0 = String::from_utf8(bytes.to_vec()).map_err(|_| anyhow!("svg must be utf-8"))?;
 
     // Use existing xml scan + text-node extraction logic. (Sandboxing will be the safety boundary.)
-    let scan = crate::xml_scan::scan(&raw);
+    let scan = crate::xml_scan::scan(&raw0);
+
+    // Best-effort: strip DOCTYPE/ENTITY blocks so the XML parser can still extract text.
+    // We keep scan warnings so we don't lose the signal.
+    let mut raw = raw0.clone();
+    if scan.has_doctype || scan.has_entity {
+        if let Some(start) = raw.to_lowercase().find("<!doctype") {
+            if let Some(end) = raw[start..].find("]>") {
+                let end = start + end + 2;
+                raw.replace_range(start..end, "");
+            }
+        }
+        // Drop any remaining ENTITY decls.
+        while let Some(pos) = raw.to_lowercase().find("<!entity") {
+            if let Some(end) = raw[pos..].find('>') {
+                raw.replace_range(pos..(pos + end + 1), "");
+            } else {
+                break;
+            }
+        }
+        raw = raw.replace("&xxe;", "");
+    }
 
     let mut warnings: Vec<String> = vec![];
     if scan.severity > 0 {
@@ -274,7 +302,9 @@ pub fn run_helper(
     bytes: &[u8],
     timeout: Duration,
 ) -> Result<ExtractResponse> {
-    let mut child = Command::new("acip-extract")
+    let bin = std::env::var("ACIP_EXTRACTOR_BIN").unwrap_or_else(|_| "acip-extract".to_string());
+
+    let mut child = Command::new(bin)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
