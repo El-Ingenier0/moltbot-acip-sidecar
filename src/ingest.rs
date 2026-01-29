@@ -325,11 +325,18 @@ pub async fn ingest_source(
         };
 
         // Run helper in a blocking task with a generous timeout.
+        // (Timeout is configurable for tests.)
+        let extractor_timeout_secs: u64 = std::env::var("ACIP_EXTRACTOR_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .unwrap_or(180);
+        let extractor_timeout = std::time::Duration::from_secs(extractor_timeout_secs);
+
         let join = tokio::task::spawn_blocking(move || {
-            extract::run_helper(&req, &input_bytes, std::time::Duration::from_secs(180))
+            extract::run_helper(&req, &input_bytes, extractor_timeout)
         });
 
-        let resp = match tokio::time::timeout(std::time::Duration::from_secs(180), join).await {
+        let resp = match tokio::time::timeout(extractor_timeout, join).await {
             Ok(Ok(Ok(r))) => r,
             Ok(Ok(Err(e))) => {
                 return (
