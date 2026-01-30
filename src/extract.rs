@@ -8,6 +8,77 @@ use std::{
 use tempfile::tempdir;
 use wait_timeout::ChildExt;
 
+#[cfg(target_os = "linux")]
+mod seccomp {
+    use std::{ffi::c_void, io};
+
+    // Minimal libseccomp FFI (we only need default-allow + syscall deny rules + load).
+    type ScmpFilterCtx = *mut c_void;
+
+    #[link(name = "seccomp")]
+    extern "C" {
+        fn seccomp_init(def_action: u32) -> ScmpFilterCtx;
+        fn seccomp_rule_add(ctx: ScmpFilterCtx, action: u32, syscall: i32, arg_cnt: u32) -> i32;
+        fn seccomp_load(ctx: ScmpFilterCtx) -> i32;
+        fn seccomp_release(ctx: ScmpFilterCtx);
+    }
+
+    const SCMP_ACT_ALLOW: u32 = 0x7fff0000;
+    const SCMP_ACT_ERRNO: u32 = 0x00050000;
+
+    fn scmp_act_errno(errno: i32) -> u32 {
+        SCMP_ACT_ERRNO | ((errno as u32) & 0x0000ffff)
+    }
+
+    pub fn install_network_deny() -> io::Result<()> {
+        unsafe {
+            let ctx = seccomp_init(SCMP_ACT_ALLOW);
+            if ctx.is_null() {
+                return Err(io::Error::other("seccomp_init returned null"));
+            }
+
+            let deny = scmp_act_errno(libc::EPERM);
+            let syscalls: &[(i32, &str)] = &[
+                (libc::SYS_socket as i32, "socket"),
+                (libc::SYS_connect as i32, "connect"),
+                (libc::SYS_accept as i32, "accept"),
+                (libc::SYS_accept4 as i32, "accept4"),
+                (libc::SYS_bind as i32, "bind"),
+                (libc::SYS_listen as i32, "listen"),
+                (libc::SYS_sendto as i32, "sendto"),
+                (libc::SYS_recvfrom as i32, "recvfrom"),
+                (libc::SYS_sendmsg as i32, "sendmsg"),
+                (libc::SYS_recvmsg as i32, "recvmsg"),
+                (libc::SYS_getsockopt as i32, "getsockopt"),
+                (libc::SYS_setsockopt as i32, "setsockopt"),
+                (libc::SYS_shutdown as i32, "shutdown"),
+                (libc::SYS_socketpair as i32, "socketpair"),
+                (libc::SYS_getpeername as i32, "getpeername"),
+                (libc::SYS_getsockname as i32, "getsockname"),
+            ];
+
+            for (num, name) in syscalls {
+                let rc = seccomp_rule_add(ctx, deny, *num, 0);
+                if rc != 0 {
+                    seccomp_release(ctx);
+                    return Err(io::Error::other(format!(
+                        "seccomp_rule_add failed for {name} (rc={rc})"
+                    )));
+                }
+            }
+
+            let rc = seccomp_load(ctx);
+            if rc != 0 {
+                seccomp_release(ctx);
+                return Err(io::Error::other(format!("seccomp_load failed (rc={rc})")));
+            }
+
+            seccomp_release(ctx);
+            Ok(())
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtractKind {
@@ -332,6 +403,25 @@ pub fn run_helper(
 
     let mut cmd = Command::new(bin);
     cmd.env_clear().env("PATH", "/usr/bin:/bin");
+
+    // Pass through explicit extractor tuning knobs (we env_clear for safety).
+    for key in [
+        "ACIP_EXTRACTOR_RLIMIT_AS_MB",
+        "ACIP_EXTRACTOR_RLIMIT_NOFILE",
+        "ACIP_EXTRACTOR_RLIMIT_FSIZE_MB",
+        "ACIP_EXTRACTOR_RLIMIT_NPROC",
+        "ACIP_EXTRACTOR_NICE",
+        "ACIP_EXTRACTOR_SECCOMP",
+        // Test-only/debug passthrough.
+        "ACIP_EXTRACTOR_SELFTEST_NET",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            if !v.trim().is_empty() {
+                cmd.env(key, v);
+            }
+        }
+    }
+
     if !tmpdir.trim().is_empty() {
         cmd.env("TMPDIR", tmpdir);
     }
@@ -436,6 +526,19 @@ pub fn run_helper(
             let rc = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
             if rc != 0 {
                 return Err(std::io::Error::last_os_error());
+            }
+
+            // Optional: install a seccomp filter to deny network syscalls. This is opt-in and
+            // intentionally default-allow to avoid breaking poppler/tesseract.
+            if std::env::var("ACIP_EXTRACTOR_SECCOMP")
+                .ok()
+                .is_some_and(|v| v.trim() == "1")
+            {
+                #[cfg(target_os = "linux")]
+                {
+                    crate::extract::seccomp::install_network_deny()
+                        .map_err(|e| std::io::Error::other(format!("seccomp setup failed: {e}")))?;
+                }
             }
 
             let rc = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);

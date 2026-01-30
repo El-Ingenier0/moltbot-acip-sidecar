@@ -72,6 +72,7 @@ Same knobs as system install (see `docs/install.md`), typically set via `systemc
 - `ACIP_EXTRACTOR_NICE`
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (opt-in)
 - `ACIP_EXTRACTOR_TMPDIR` (optional)
+- `ACIP_EXTRACTOR_SECCOMP` (optional; Linux): set to `1` to deny network-related syscalls in the extractor helper
 
 ## Smoke test
 

@@ -119,6 +119,7 @@ These env vars tune the **out-of-process extractor** (PDF/SVG hybrid extraction)
 - `ACIP_EXTRACTOR_NICE` (default: `10`): niceness increment
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (optional): cap processes/threads (opt-in; can break some tools)
 - `ACIP_EXTRACTOR_TMPDIR` (optional): override temp directory for extractor (OCR writes images here)
+- `ACIP_EXTRACTOR_SECCOMP` (optional; Linux): set to `1` to deny network-related syscalls in the extractor helper (default allowlist otherwise)
 
 ## Notes
 
