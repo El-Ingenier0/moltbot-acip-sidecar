@@ -73,6 +73,7 @@ You can tune limits via env:
 - `ACIP_EXTRACTOR_NICE`
 - `ACIP_EXTRACTOR_RLIMIT_NPROC` (opt-in)
 - `ACIP_EXTRACTOR_TMPDIR` (optional)
+- `ACIP_EXTRACTOR_SECCOMP=1` (optional; Linux): deny network syscalls inside the extractor helper (image includes `libseccomp2`)
 
 ## Smoke test
 
