@@ -1,58 +1,38 @@
-# TODOs (Claude code review)
+# TODO
 
-Legend: **P0** = critical, **P1** = high, **P2** = medium, **P3** = low.
+This file tracks follow-up work for **acip-sidecar**.
 
-## P0 (critical)
-- [x] **Fix Rust partial-move bug in `ingest_source`**: current code moves `req.text`/`req.bytes_b64` and later uses `req.*` for `source_meta`. This should be refactored to destructure `IngestRequest` once into locals before selecting `raw`.
+Principles:
+- Prefer small, reviewable PRs.
+- Anything security-relevant should include tests and clear documentation.
 
-## P1 (high)
-- [x] **Add request size limits / body limits** for `ingest_source` (prevent DoS via huge JSON / base64 payloads). Consider axum `DefaultBodyLimit` + explicit max bytes for `bytes_b64`.
-- [x] **Add timeouts to outbound HTTP model calls** (`reqwest::Client::builder().timeout(...)`, connect/read timeouts). Prevent hangs.
-- [x] **Token auth robustness**: treat multiple `X-ACIP-Token` headers / whitespace / non-UTF8 consistently; decide whether to allow bearer format. Consider constant-time compare (minor, but easy).
+## P0 — Security / correctness
 
-## P2 (medium)
-- [x] **Use config values for `policies_file`** instead of `let _ = ...` placeholder; i.e., make config authoritative default while CLI overrides.
-- [x] **Centralize router construction** (avoid duplication between main/tests; easier future security hardening).
-- [x] **Improve JSON extraction** in `sentry::extract_json_only` (current brace-slicing is brittle); consider strict JSON mode or a more robust parser strategy.
-- [x] **Reduce prompt bloat**: `DecisionEngine::build_prompt` includes full schema each call; consider caching schema text or using shorter schema reference.
+- [ ] **Extractor output cap hardening**: add a regression test proving the parent enforces output caps even if the helper writes more than expected.
+- [ ] **Sentry JSON parsing ambiguity**: if tolerant parsing is enabled (default), detect/handle multiple JSON candidates (e.g., refuse if more than one valid candidate parses).
+- [ ] **HTML parser DoS budgeting**: add explicit normalization CPU/memory budget notes + consider a stricter default cap for `normalize.max_input_chars`.
 
-## Security follow-ups (post-MVP)
-- [ ] **Safe PDF/SVG ingestion architecture**: if/when we add PDF rendering or SVG parsing, run it in a separate sandboxed process (no network, tight CPU/mem/time limits) to mitigate parser/rendering memory-corruption risk; then treat extracted text as untrusted (prompt-injection).
+## P1 — Robustness / ops
 
-## MVP+: safer HTML/SVG handling before model exposure
-- [x] **Add content normalization pipeline**: keep original raw for digest/audit, but generate a separate `model_text` for sentry decisions.
-- [x] **HTML → structured text conversion** (minimally lossy): convert HTML to readable text/markdown-ish while preserving headings/lists/links as best we can.
-- [x] **Drop active HTML content**: ensure scripts/styles/iframes don’t make it into model_text; remove obvious JS URLs (e.g. `javascript:`).
-- [x] **SVG input handling**: treat as markup; extract visible text nodes only (no script) into model_text.
-- [x] **Plumb audit metadata**: add response fields indicating `normalized=true`, original/extracted lengths, and a list of removed elements/patterns.
-- [x] **Tests**: add fixtures for HTML with script prompt injection and ensure model_text excludes script content.
+- [ ] **Canonicalize host reputation keys**:
+  - IPv6 bracket normalization decision (keep brackets vs strip).
+  - Add an explicit helper + docs for canonical form.
+- [ ] **Reputation store durability sweep**: add a test path for quarantine rename failure (exercise copy/remove fallback).
+- [ ] **More deterministic normalization steps**: ensure `normalization_steps` ordering is stable and documented.
 
-## MVP safety invariant: markup cannot enable tools
-- [x] **Hard-cap tools for HTML/SVG**: if input is HTML-like or SVG-like, force `tools_allowed=false` regardless of model decision; record reason in response.
-- [x] **Tests**: ensure even if model returns `tools_allowed=true`, HTML/SVG responses return `tools_allowed=false`.
+## P2 — DX / docs
 
-## Threat intel (MVP++)
-- [x] **Define attack taxonomy**: add `AttackType` enum (prompt_injection, data_exfiltration, tool_coercion, credential_theft, jailbreak, social_engineering, etc.).
-- [x] **Heuristic detectors**: scan `model_text` for high-signal patterns and emit `attack_types` + `indicators`.
-- [x] **Plumb threat fields into ingest response**: include `attack_types`, `attack_indicators`, and `threat_score` (or risk hints).
-- [x] **Oracle leakage control**: return a minimal/public threat summary plus separate audit/internal threat detail; gate internal detail behind `ACIP_AUDIT_MODE=ENABLED`.
-- [x] **Source reputation store**: persist per-source_id / per-host counters (seen, suspected_attacks, last_seen, last_attack_types).
-- [x] **Raise risk for bad actors**: if source reputation is bad, bump threat_score / risk_level and cap tools even for non-markup unless explicitly overridden.
-- [x] **Reputation decay**: apply adaptive half-life so one-off incidents decay quickly, repeat offenders decay slowly; thresholds use effective risk.
+- [ ] Add a short **SECURITY.md** section describing the invariants:
+  - fenced content only
+  - tools hard caps
+  - caller tool authorization
+  - extractor sandbox boundary
+- [ ] Add a release process note on when to update `CHANGE_LOG.md` (manual vs generated).
 
-## Tool-call gating (CIF alignment)
-- [x] **Require explicit tool authorization**: default `tools_allowed=false` for all untrusted content; only allow tools if caller explicitly requests/authorizes via header (and policy permits).
-- [x] **Docs**: document the tool-authorization header and expected behavior.
-- [x] **Tests**: ensure model cannot enable tools without explicit authorization.
-- [x] **Tests**: unit tests for taxonomy + detectors + reputation bumping.
-- [x] **Integration tests (attack suite)**: add HTTP-level tests that POST /v1/acip/ingest_source with a corpus of attack fixtures (prompt injection, tool coercion, exfiltration, credential theft, jailbreak/social engineering) and assert invariants (e.g., tools hard-caps; risk escalation; threat fields populated).
+## Backlog
 
-## Installation & ops (MVP)
-- [x] **Create install guide**: prerequisites, build/run, config paths, secrets file, policies file.
-- [x] **Provide systemd unit template**: /etc/acip paths, service user/group, restart policy.
-- [x] **Add install script** (best-effort): builds binary, creates user/group, writes unit + config example (no secrets), enables service.
-- [x] **Smoke test instructions**: curl health + ingest example.
-
-## P3 (low)
-- [x] **Make `config.example.toml` match actual config schema fully** (document remaining keys as added).
-- [x] **Docs**: explain loopback default behavior and how token requirement changes when `allow_insecure_loopback=false`.
+- [ ] Optional: add a `CHANGELOG.md` (Keep a curated human-facing version separate from `CHANGE_LOG.md` which is a commit timeline).
+- [ ] Optional: structured log events / metrics for:
+  - extractor timeouts
+  - model call failures (L1/L2)
+  - quarantine events
