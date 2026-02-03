@@ -28,9 +28,22 @@ allow_insecure_loopback = true   # if true, loopback requests may omit token
 token_env = "ACIP_AUTH_TOKEN"
 ```
 
+#### Auth matrix (normative)
+
+This table is the canonical spec. No tribal knowledge.
+
+- **Loopback request** means the client connects to a loopback address (`127.0.0.1`) or a local unix socket.
+- **Non-loopback request** means anything else.
+
+| require_token | allow_insecure_loopback | Loopback request | Non-loopback request |
+|---|---|---|---|
+| false | (any) | Token not required | Token not required |
+| true  | true  | Token optional | Token required |
+| true  | false | Token required | Token required |
+
 Notes:
-- If binding to loopback (`127.0.0.1`), the default behavior may allow requests without `X-ACIP-Token`.
 - To force token auth even on loopback, set `allow_insecure_loopback=false` and `require_token=true`.
+- `X-ACIP-Token` is matched against the value in environment variable `security.token_env`.
 
 ### Request (JSON)
 ```json

@@ -53,6 +53,16 @@ Notes:
 - The container defaults to `--config /etc/acip/config.toml` (see Dockerfile CMD).
 - For compose-based deployments, `acipctl config set --restart docker-compose` prints the restart command.
 
+### Live vs stub mode (network implications)
+
+- `ACIP_SENTRY_MODE=stub` performs no external model calls. It is compatible with `--network=none`.
+- `ACIP_SENTRY_MODE=live` performs external model calls. **Do not use** `--network=none` (or `network_mode: none`) unless you intentionally want all model calls to fail.
+
+Recommendation:
+- If you want the strongest isolation but still need live mode, prefer:
+  - host firewall rules / egress allowlisting, and/or
+  - the extractor's optional seccomp-deny-network mode (`ACIP_EXTRACTOR_SECCOMP=1`) to ensure the extractor helper cannot make network syscalls.
+
 ### No-network mode (recommended)
 
 If you want *container-level* no-network (strong and simple):

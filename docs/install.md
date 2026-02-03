@@ -114,6 +114,19 @@ curl -sS \
   http://127.0.0.1:18795/v1/acip/ingest_source | jq
 ```
 
+## Extractor overview
+
+For PDF/SVG inputs the sidecar uses an **out-of-process extractor** helper.
+
+Why:
+- parsing/rendering complex formats is a large attack surface
+- running the extractor out-of-process allows tighter resource limits and (optional) syscall filtering
+
+At a high level:
+- sidecar receives bytes (or text)
+- for PDF/SVG it invokes `acip-extract` in a sandboxed subprocess
+- extracted text is then normalized and evaluated by the sentry policy
+
 ## Sandbox/extractor knobs (optional)
 
 These env vars tune the **out-of-process extractor** (PDF/SVG hybrid extraction):
