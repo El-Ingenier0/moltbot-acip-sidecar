@@ -27,7 +27,8 @@ cd acip-sidecar
 #   --user acip_user --group acip_user
 #   --l1-model gemini-2.0-flash
 #   --l2-model claude-3-5-haiku-latest
-sudo ./scripts/install.sh
+# Default is stub mode (safe; no external calls)
+sudo ./scripts/install.sh --sentry-mode stub
 ```
 
 Common overrides:
@@ -36,6 +37,14 @@ Common overrides:
 sudo ./scripts/install.sh \
   --port 18795 \
   --user acip_user --group acip_user \
+  --sentry-mode stub
+```
+
+Live mode (requires explicit models):
+
+```bash
+sudo ./scripts/install.sh \
+  --sentry-mode live \
   --l1-model gemini-2.0-flash \
   --l2-model claude-3-5-haiku-latest
 ```

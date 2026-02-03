@@ -31,6 +31,12 @@ docker run --rm \
 
 ### Docker Compose (recommended)
 
+If you prefer an interactive generator, use:
+
+```bash
+sudo ./scripts/install --mode docker
+```
+
 Example `docker-compose.yml` snippet:
 
 ```yaml
@@ -42,6 +48,8 @@ services:
     environment:
       # Set to "live" when you have keys configured.
       - ACIP_SENTRY_MODE=stub
+
+      # NOTE: When using live mode, set model policy explicitly.
 
       # Model policy (optional). Defaults shown:
       - ACIP_L1_PROVIDER=gemini

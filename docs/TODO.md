@@ -22,6 +22,8 @@ Principles:
 
 ## P2 — DX / docs
 
+- [ ] Add `--json-logs` option (and implement JSON log formatter), with docs + examples.
+
 - [ ] Add a short **SECURITY.md** section describing the invariants:
   - fenced content only
   - tools hard caps

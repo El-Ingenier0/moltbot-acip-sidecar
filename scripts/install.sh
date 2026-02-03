@@ -34,6 +34,9 @@ parse_args() {
   # Defaults
   L1_MODEL="gemini-2.0-flash"
   L2_MODEL="claude-3-5-haiku-latest"
+  L1_MODEL_SET=0
+  L2_MODEL_SET=0
+  SENTRY_MODE="stub"
   PORT="18795"
   APP_USER_DEFAULT="acip_user"
   APP_GROUP_DEFAULT="acip_user"
@@ -43,9 +46,11 @@ parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --l1-model)
-        L1_MODEL="$2"; shift 2 ;;
+        L1_MODEL="$2"; L1_MODEL_SET=1; shift 2 ;;
       --l2-model)
-        L2_MODEL="$2"; shift 2 ;;
+        L2_MODEL="$2"; L2_MODEL_SET=1; shift 2 ;;
+      --sentry-mode)
+        SENTRY_MODE="$2"; shift 2 ;;
       --port)
         PORT="$2"; shift 2 ;;
       --user)
@@ -54,12 +59,16 @@ parse_args() {
         APP_GROUP_OVERRIDE="$2"; shift 2 ;;
       -h|--help)
         cat <<'EOF'
-Usage: install.sh [--port <port>] [--user <user>] [--group <group>] [--l1-model <model>] [--l2-model <model>]
+Usage: install.sh [--port <port>] [--user <user>] [--group <group>] [--sentry-mode stub|live] [--l1-model <model>] [--l2-model <model>]
 
 This installer configures the default model policy via environment variables.
 
 Examples:
-  sudo ./scripts/install.sh --port 18795 --user acip_user --group acip_user \
+  # Safe default: stub mode (no external model calls)
+  sudo ./scripts/install.sh --port 18795 --user acip_user --group acip_user --sentry-mode stub
+
+  # Live mode requires explicit model choices:
+  sudo ./scripts/install.sh --sentry-mode live \
     --l1-model gemini-2.0-flash --l2-model claude-3-5-haiku-latest
 EOF
         exit 0
@@ -113,6 +122,24 @@ main() {
   if [[ -n "${APP_GROUP_OVERRIDE}" ]]; then APP_GROUP="${APP_GROUP_OVERRIDE}"; fi
   if [[ -z "${APP_USER}" ]]; then APP_USER="${APP_USER_DEFAULT}"; fi
   if [[ -z "${APP_GROUP}" ]]; then APP_GROUP="${APP_GROUP_DEFAULT}"; fi
+
+  # Validate sentry mode
+  if [[ "${SENTRY_MODE}" != "stub" && "${SENTRY_MODE}" != "live" ]]; then
+    echo "Invalid --sentry-mode: ${SENTRY_MODE} (expected stub|live)" >&2
+    exit 1
+  fi
+
+  # Live mode requires explicit model choices (no hidden defaults)
+  if [[ "${SENTRY_MODE}" == "live" ]]; then
+    if (( L1_MODEL_SET == 0 )); then
+      echo "--sentry-mode live requires --l1-model" >&2
+      exit 1
+    fi
+    if (( L2_MODEL_SET == 0 )); then
+      echo "--sentry-mode live requires --l2-model" >&2
+      exit 1
+    fi
+  fi
 
   # Validate port
   if ! [[ "${PORT}" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
@@ -205,7 +232,13 @@ main() {
 
   install -d -m 0755 "$DROPIN_DIR"
 
-  # Drop-in: models
+  # Drop-in: sentry mode
+  cat >"$DROPIN_DIR/00-sentry-mode.conf" <<EOF
+[Service]
+Environment=ACIP_SENTRY_MODE=${SENTRY_MODE}
+EOF
+
+  # Drop-in: models (only meaningful in live mode; harmless otherwise)
   cat >"$DROPIN_DIR/10-models.conf" <<EOF
 [Service]
 Environment=ACIP_L1_PROVIDER=${L1_PROVIDER}

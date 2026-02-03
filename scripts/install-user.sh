@@ -23,16 +23,21 @@ need_cmd() {
 parse_args() {
   L1_MODEL="gemini-2.0-flash"
   L2_MODEL="claude-3-5-haiku-latest"
+  L1_MODEL_SET=0
+  L2_MODEL_SET=0
+  SENTRY_MODE="stub"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --l1-model)
-        L1_MODEL="$2"; shift 2 ;;
+        L1_MODEL="$2"; L1_MODEL_SET=1; shift 2 ;;
       --l2-model)
-        L2_MODEL="$2"; shift 2 ;;
+        L2_MODEL="$2"; L2_MODEL_SET=1; shift 2 ;;
+      --sentry-mode)
+        SENTRY_MODE="$2"; shift 2 ;;
       -h|--help)
         cat <<'EOF'
-Usage: install-user.sh [--l1-model <model>] [--l2-model <model>]
+Usage: install-user.sh [--sentry-mode stub|live] [--l1-model <model>] [--l2-model <model>]
 
 This installer configures the default model policy via environment variables
 in the systemd user service.
@@ -129,6 +134,22 @@ main() {
   install -d -m 0755 "$HOME/.config/systemd/user"
   install -m 0644 "${UNIT_SRC}" "${UNIT_DST}"
 
+  if [[ "${SENTRY_MODE}" != "stub" && "${SENTRY_MODE}" != "live" ]]; then
+    echo "Invalid --sentry-mode: ${SENTRY_MODE} (expected stub|live)" >&2
+    exit 1
+  fi
+
+  if [[ "${SENTRY_MODE}" == "live" ]]; then
+    if (( L1_MODEL_SET == 0 )); then
+      echo "--sentry-mode live requires --l1-model" >&2
+      exit 1
+    fi
+    if (( L2_MODEL_SET == 0 )); then
+      echo "--sentry-mode live requires --l2-model" >&2
+      exit 1
+    fi
+  fi
+
   L1_PROVIDER=$(model_provider_for "${L1_MODEL}")
   L2_PROVIDER=$(model_provider_for "${L2_MODEL}")
   if [[ "$L1_PROVIDER" == "unknown" || "$L2_PROVIDER" == "unknown" ]]; then
@@ -141,6 +162,11 @@ main() {
 
   DROPIN_DIR="$HOME/.config/systemd/user/acip-sidecar.service.d"
   install -d -m 0755 "$DROPIN_DIR"
+  cat >"$DROPIN_DIR/00-sentry-mode.conf" <<EOF
+[Service]
+Environment=ACIP_SENTRY_MODE=${SENTRY_MODE}
+EOF
+
   cat >"$DROPIN_DIR/10-models.conf" <<EOF
 [Service]
 Environment=ACIP_L1_PROVIDER=${L1_PROVIDER}

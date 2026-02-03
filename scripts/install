@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Unified installer entrypoint.
+# Default mode: docker (per operator preference).
+
+MODE="docker"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/install [--mode docker|system|user] [args...]
+
+Modes:
+  docker  (default) Generate docker-compose + config/secrets skeleton and prompt for required values.
+  system  Run scripts/install.sh (systemd global)
+  user    Run scripts/install-user.sh (systemd --user)
+
+Pass -h/--help to a sub-installer for details.
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --mode)
+        MODE="$2"; shift 2 ;;
+      -h|--help)
+        usage; exit 0 ;;
+      *)
+        # forward the rest to the chosen installer
+        FORWARD_ARGS+=("$1"); shift ;;
+    esac
+  done
+}
+
+need_root() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    echo "This mode requires root (try: sudo $0 ...)" >&2
+    exit 1
+  fi
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Missing required command: $1" >&2
+    exit 1
+  }
+}
+
+prompt_select() {
+  local prompt="$1"; shift
+  local -a options=("$@")
+  echo "$prompt"
+  select opt in "${options[@]}"; do
+    if [[ -n "$opt" ]]; then
+      echo "$opt"
+      return 0
+    fi
+    echo "Invalid selection." >&2
+  done
+}
+
+prompt_secret() {
+  local label="$1"
+  local v
+  read -r -s -p "${label}: " v; echo
+  echo "$v"
+}
+
+model_provider_for() {
+  local m
+  m="${1,,}"
+  if [[ "$m" == claude-* || "$m" == anthropic/* || "$m" == *claude* || "$m" == *anthropic* ]]; then
+    echo "anthropic"; return 0
+  fi
+  if [[ "$m" == gemini-* || "$m" == google/* || "$m" == *gemini* || "$m" == *google* ]]; then
+    echo "gemini"; return 0
+  fi
+  echo "unknown"
+}
+
+docker_mode() {
+  need_root
+  need_cmd install
+
+  local ETC_DIR="/etc/acip"
+  local PORT="18795"
+  local SENTRY_MODE
+  local L1_MODEL=""
+  local L2_MODEL=""
+
+  # Defaults: localhost + stub (safe).
+  SENTRY_MODE=$(prompt_select "Select sentry mode:" "stub" "live")
+
+  read -r -p "Port [${PORT}]: " port_in
+  if [[ -n "${port_in}" ]]; then PORT="${port_in}"; fi
+  if ! [[ "${PORT}" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+    echo "Invalid port: ${PORT}" >&2
+    exit 1
+  fi
+
+  if [[ "${SENTRY_MODE}" == "live" ]]; then
+    L1_MODEL=$(prompt_select "Select L1 model (cheap-first):" "gemini-2.0-flash" "gemini-2.0-flash-lite")
+    L2_MODEL=$(prompt_select "Select L2 model (fallback):" "claude-3-5-haiku-latest" "claude-3-5-sonnet-latest")
+  fi
+
+  echo "[1/3] Ensuring ${ETC_DIR} exists"
+  install -d -m 0755 "${ETC_DIR}"
+
+  if [[ ! -f "${ETC_DIR}/config.toml" ]]; then
+    echo "[2/3] Writing ${ETC_DIR}/config.toml from config.example.toml"
+    install -m 0644 config.example.toml "${ETC_DIR}/config.toml"
+    sed -i -E "s/^port\s*=\s*[0-9]+/port = ${PORT}/" "${ETC_DIR}/config.toml" 2>/dev/null || true
+  else
+    echo "[2/3] Leaving existing ${ETC_DIR}/config.toml in place"
+  fi
+
+  if [[ ! -f "${ETC_DIR}/secrets.env" ]]; then
+    echo "[secrets] Creating ${ETC_DIR}/secrets.env (mode 0600)"
+    install -m 0600 /dev/null "${ETC_DIR}/secrets.env"
+
+    echo "[secrets] Enter secrets now (input hidden). Leave blank to skip."
+    local gemini_key anthropic_key acip_token
+    gemini_key=$(prompt_secret "GEMINI_API_KEY")
+    anthropic_key=$(prompt_secret "ANTHROPIC_API_KEY")
+    acip_token=$(prompt_secret "ACIP_AUTH_TOKEN (recommended)")
+
+    {
+      echo "# Required for live sentry mode:"
+      [[ -n "${gemini_key}" ]] && echo "GEMINI_API_KEY=${gemini_key}"
+      [[ -n "${anthropic_key}" ]] && echo "ANTHROPIC_API_KEY=${anthropic_key}"
+      echo
+      echo "# Auth token for callers (recommended):"
+      [[ -n "${acip_token}" ]] && echo "ACIP_AUTH_TOKEN=${acip_token}"
+      echo
+    } >>"${ETC_DIR}/secrets.env"
+
+    chmod 0600 "${ETC_DIR}/secrets.env" 2>/dev/null || true
+  else
+    echo "[secrets] Leaving existing ${ETC_DIR}/secrets.env in place"
+  fi
+
+  echo "[3/3] Writing docker-compose.yml in current directory"
+  local L1_PROVIDER L2_PROVIDER
+  L1_PROVIDER=$(model_provider_for "${L1_MODEL:-gemini-2.0-flash}")
+  L2_PROVIDER=$(model_provider_for "${L2_MODEL:-claude-3-5-haiku-latest}")
+
+  cat > docker-compose.yml <<EOF
+services:
+  acip-sidecar:
+    image: acip-sidecar:latest
+    ports:
+      - "127.0.0.1:${PORT}:${PORT}"
+    environment:
+      - ACIP_SENTRY_MODE=${SENTRY_MODE}
+EOF
+
+  if [[ "${SENTRY_MODE}" == "live" ]]; then
+    cat >> docker-compose.yml <<EOF
+      - ACIP_L1_PROVIDER=${L1_PROVIDER}
+      - ACIP_L1_MODEL=${L1_MODEL}
+      - ACIP_L2_PROVIDER=${L2_PROVIDER}
+      - ACIP_L2_MODEL=${L2_MODEL}
+EOF
+  fi
+
+  cat >> docker-compose.yml <<'EOF'
+    volumes:
+      - /etc/acip/config.toml:/etc/acip/config.toml:ro
+      - /etc/acip/secrets.env:/etc/acip/secrets.env:ro
+    command: ["--config","/etc/acip/config.toml","--secrets-file","/etc/acip/secrets.env"]
+EOF
+
+  echo "Done. Next steps:"
+  echo "- Build image: docker build -t acip-sidecar:latest ."
+  echo "- Start: docker compose up -d"
+  echo "- Logs: docker compose logs -f"
+}
+
+FORWARD_ARGS=()
+parse_args "$@"
+
+case "$MODE" in
+  docker)
+    docker_mode
+    ;;
+  system)
+    exec "$(dirname "$0")/install.sh" "${FORWARD_ARGS[@]}"
+    ;;
+  user)
+    exec "$(dirname "$0")/install-user.sh" "${FORWARD_ARGS[@]}"
+    ;;
+  *)
+    echo "Unknown --mode: $MODE" >&2
+    usage
+    exit 1
+    ;;
+ esac
