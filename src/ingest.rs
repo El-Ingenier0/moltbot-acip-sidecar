@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tracing::error;
+use url::Url;
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -91,6 +92,15 @@ pub struct IngestResponse {
 
 fn fence_external(s: &str) -> String {
     format!("```external\n{}\n```", s)
+}
+
+fn host_from_url(url: &str) -> Option<String> {
+    let parsed = Url::parse(url).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return None,
+    }
+    parsed.host_str().map(|h| h.to_lowercase())
 }
 
 fn is_html_like(source_type: &SourceType, content_type: &str, text: &str) -> bool {
@@ -401,11 +411,7 @@ pub async fn ingest_source(
         };
 
         // Update reputation store.
-        let host = url
-            .as_deref()
-            .and_then(|u| u.split("//").nth(1))
-            .and_then(|rest| rest.split('/').next())
-            .map(|h| h.to_lowercase());
+        let host = url.as_deref().and_then(host_from_url);
         let recs = state.reputation.record(reputation::observation(
             source_id.clone(),
             host,
@@ -658,11 +664,7 @@ pub async fn ingest_source(
     };
 
     // Update reputation store (best-effort, does not change decision yet).
-    let host = url
-        .as_deref()
-        .and_then(|u| u.split("//").nth(1))
-        .and_then(|rest| rest.split('/').next())
-        .map(|h| h.to_lowercase());
+    let host = url.as_deref().and_then(host_from_url);
     let recs = state.reputation.record(reputation::observation(
         source_id.clone(),
         host,
@@ -859,4 +861,37 @@ pub async fn ingest_source(
     };
 
     (StatusCode::OK, Json(resp)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::host_from_url;
+
+    #[test]
+    fn host_from_url_accepts_http_https() {
+        assert_eq!(
+            host_from_url("https://Example.com/Path"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            host_from_url("http://Sub.Example.com"),
+            Some("sub.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn host_from_url_rejects_invalid_or_non_http() {
+        assert_eq!(host_from_url("ftp://example.com"), None);
+        assert_eq!(host_from_url("not a url"), None);
+        assert_eq!(host_from_url("http://"), None);
+        assert_eq!(host_from_url("mailto:alice@example.com"), None);
+    }
+
+    #[test]
+    fn host_from_url_ignores_port() {
+        assert_eq!(
+            host_from_url("https://Example.com:8443/path"),
+            Some("example.com".to_string())
+        );
+    }
 }
