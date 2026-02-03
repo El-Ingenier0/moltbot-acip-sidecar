@@ -35,6 +35,7 @@ fn cli_overrides_config() {
             full_if_lte: Some(3),
         }),
         security: None,
+        normalize: None,
     };
 
     let cli = server_config::CliOverrides {
