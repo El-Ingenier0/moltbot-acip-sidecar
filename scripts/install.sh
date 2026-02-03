@@ -101,6 +101,8 @@ main() {
   need_cmd install
   need_cmd id
 
+  # setcap is optional (only needed for ports <1024)
+
   if ! command -v cargo >/dev/null 2>&1; then
     echo "cargo not found. Install Rust toolchain first." >&2
     exit 1
@@ -129,6 +131,21 @@ main() {
   echo "[3/6] Installing binary to ${PREFIX}"
   install -d -m 0755 "${PREFIX}"
   install -m 0755 target/release/acip-sidecar "${PREFIX}/acip-sidecar"
+
+  # If binding to a privileged port (<1024), grant CAP_NET_BIND_SERVICE so we can
+  # still run as the unprivileged service user.
+  if (( PORT < 1024 )); then
+    if command -v setcap >/dev/null 2>&1; then
+      echo "[3/6] Granting CAP_NET_BIND_SERVICE to ${PREFIX}/acip-sidecar for privileged port ${PORT}"
+      setcap cap_net_bind_service=+ep "${PREFIX}/acip-sidecar" || {
+        echo "WARNING: setcap failed; binding to port ${PORT} may fail." >&2
+        echo "         Install libcap2-bin and rerun installer, or choose a port >=1024." >&2
+      }
+    else
+      echo "WARNING: port ${PORT} is <1024 but setcap is not available." >&2
+      echo "         Install libcap2-bin (setcap) or choose a port >=1024." >&2
+    fi
+  fi
 
   echo "[4/6] Ensuring ${ETC_DIR} exists"
   install -d -m 0755 "${ETC_DIR}"
