@@ -7,6 +7,7 @@
 
 ## 2026-02-03
 
+- 2026-02-03T17:06:29-06:00 261103c install/docs: add docker-default installer entrypoint; add --sentry-mode; require explicit models for live; add json logs TODO
 - 2026-02-03T16:51:15-06:00 4aed046 docs: update installation docs for installer flags, model env, privileged ports
 - 2026-02-03T16:50:01-06:00 65f8ac1 install: if --port <1024, setcap CAP_NET_BIND_SERVICE on binary
 - 2026-02-03T16:48:32-06:00 ddbb712 install: add --port/--user/--group for system install (defaults), set systemd drop-in
