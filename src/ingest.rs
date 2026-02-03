@@ -94,6 +94,11 @@ fn fence_external(s: &str) -> String {
     format!("```external\n{}\n```", s)
 }
 
+/// Parse a URL and return a normalized host for reputation keys.
+///
+/// Only `http` and `https` schemes are accepted; all other schemes are rejected.
+/// The returned host is normalized by the URL parser (including IDN punycode)
+/// and lowercased for consistent matching.
 fn host_from_url(url: &str) -> Option<String> {
     let parsed = Url::parse(url).ok()?;
     match parsed.scheme() {
@@ -892,6 +897,23 @@ mod tests {
         assert_eq!(
             host_from_url("https://Example.com:8443/path"),
             Some("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn host_from_url_parses_ipv6_hosts() {
+        assert_eq!(
+            host_from_url("https://[2001:db8::1]/x"),
+            Some("2001:db8::1".to_string())
+        );
+    }
+
+    #[test]
+    fn host_from_url_documents_idn_punycode_behavior() {
+        // Url::parse accepts Unicode domains and normalizes them to punycode.
+        assert_eq!(
+            host_from_url("https://bücher.example"),
+            Some("xn--bcher-kva.example".to_string())
         );
     }
 }
