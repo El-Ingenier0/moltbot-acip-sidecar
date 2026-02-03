@@ -7,6 +7,7 @@ fn token_env_defaults_when_missing() {
         server: None,
         policy: None,
         security: None,
+        normalize: None,
     };
     assert_eq!(server_config::token_env(Some(&cfg)), "ACIP_AUTH_TOKEN");
     assert_eq!(server_config::token_env(None), "ACIP_AUTH_TOKEN");
@@ -19,6 +20,7 @@ fn allow_insecure_loopback_defaults_true() {
         server: None,
         policy: None,
         security: None,
+        normalize: None,
     };
     assert!(server_config::allow_insecure_loopback(Some(&cfg)));
     assert!(server_config::allow_insecure_loopback(None));
@@ -31,6 +33,7 @@ fn require_token_setting_defaults_true() {
         server: None,
         policy: None,
         security: None,
+        normalize: None,
     };
     assert!(server_config::require_token_setting(Some(&cfg)));
     assert!(server_config::require_token_setting(None));
