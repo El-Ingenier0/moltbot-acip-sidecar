@@ -1,5 +1,6 @@
 use crate::{
-    extract, introspection, reputation, reputation_policy, routes, sentry, state, threat, xml_scan,
+    extract, introspection, normalize, reputation, reputation_policy, routes, sentry, state,
+    threat, xml_scan,
 };
 use axum::{
     extract::State,
@@ -106,42 +107,6 @@ fn is_html_like(source_type: &SourceType, content_type: &str, text: &str) -> boo
     t.starts_with("<!doctype html") || t.starts_with("<html") || t.contains("<body")
 }
 
-fn strip_block_tag(mut s: String, tag: &str) -> String {
-    let open = format!("<{}", tag);
-    let close = format!("</{}>", tag);
-
-    loop {
-        let lower = s.to_lowercase();
-        let Some(start) = lower.find(&open) else {
-            break;
-        };
-        let Some(end) = lower[start..].find(&close) else {
-            break;
-        };
-        let end = start + end + close.len();
-        s.replace_range(start..end, "");
-    }
-
-    s
-}
-
-fn html_to_text(html: &str) -> String {
-    // MVP safety: strip obvious active content blocks before conversion.
-    let mut cleaned = html.to_string();
-    for tag in ["script", "style", "iframe", "object", "embed"] {
-        cleaned = strip_block_tag(cleaned, tag);
-    }
-
-    // Keep width reasonably wide to preserve semantic structure.
-    let mut out = html2text::from_read(cleaned.as_bytes(), 120)
-        .trim()
-        .to_string();
-
-    // MVP safety: remove obvious JS URL schemes from the model-facing text.
-    out = out.replace("javascript:", "").replace("JAVASCRIPT:", "");
-
-    out
-}
 
 fn is_svg_like(content_type: &str, text: &str) -> bool {
     let ct = content_type.to_lowercase();
@@ -608,13 +573,9 @@ pub async fn ingest_source(
     // Normalization pipeline: keep `raw` for audit/digest, but generate separate model-facing text.
     let (model_text, normalized, normalization_steps) = if is_html {
         (
-            html_to_text(&raw),
+            normalize::html_to_text_html5ever(&raw),
             true,
-            vec![
-                "strip_active_html_blocks".to_string(),
-                "html_to_text".to_string(),
-                "strip_javascript_scheme".to_string(),
-            ],
+            vec!["html_to_text_html5ever".to_string()],
         )
     } else if is_svg {
         (

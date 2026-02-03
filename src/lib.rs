@@ -5,6 +5,7 @@ pub mod extract;
 pub mod ingest;
 pub mod introspection;
 pub mod model_policy;
+pub mod normalize;
 pub mod policy_store;
 pub mod reputation;
 pub mod reputation_policy;
