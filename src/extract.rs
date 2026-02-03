@@ -606,9 +606,12 @@ pub fn run_helper(
                 );
             }
 
-            let rc = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
-            if rc != 0 {
-                return Err(std::io::Error::last_os_error());
+            #[cfg(target_os = "linux")]
+            {
+                let rc = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+                if rc != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
             }
 
             // Optional: install a seccomp filter to deny network syscalls. This is opt-in and
@@ -624,9 +627,12 @@ pub fn run_helper(
                 }
             }
 
-            let rc = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
-            if rc != 0 {
-                return Err(std::io::Error::last_os_error());
+            #[cfg(target_os = "linux")]
+            {
+                let rc = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
+                if rc != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
             }
 
             Ok(())
@@ -680,4 +686,34 @@ pub fn run_helper(
     let resp: ExtractResponse = serde_json::from_slice(&output)
         .map_err(|e| ExtractorError::OutputParse(e.to_string()))?;
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::create_secure_file;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    #[cfg(unix)]
+    fn secure_output_files_are_private() {
+        let dir = tempdir().expect("tempdir");
+        let out_path = dir.path().join("out.json");
+        let err_path = dir.path().join("err.log");
+
+        create_secure_file(&out_path).expect("create out file");
+        create_secure_file(&err_path).expect("create err file");
+
+        for path in [&out_path, &err_path] {
+            let mode = fs::metadata(path)
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600, "path={}", path.display());
+        }
+    }
 }

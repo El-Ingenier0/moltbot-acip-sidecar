@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 use acip_sidecar::extract::{run_helper, ExtractKind, ExtractRequest, ExtractorError};
 use serial_test::serial;
 use std::time::Duration;

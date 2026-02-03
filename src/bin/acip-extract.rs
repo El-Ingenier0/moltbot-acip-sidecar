@@ -52,20 +52,27 @@ fn run(out_path: Option<&str>) -> Result<()> {
         .is_some_and(|v| v.trim() == "1")
     {
         #[cfg(target_os = "linux")]
-        unsafe {
-            let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
-            if fd == -1 {
-                let err = std::io::Error::last_os_error();
-                if err.raw_os_error() == Some(libc::EPERM) {
-                    anyhow::bail!("seccomp_network_denied");
+        {
+            unsafe {
+                let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+                if fd == -1 {
+                    let err = std::io::Error::last_os_error();
+                    if err.raw_os_error() == Some(libc::EPERM) {
+                        anyhow::bail!("seccomp_network_denied");
+                    }
+                    anyhow::bail!("socket_failed: {err}");
                 }
-                anyhow::bail!("socket_failed: {err}");
+                libc::close(fd);
             }
-            libc::close(fd);
+
+            // If we managed to create a socket, seccomp isn't active.
+            anyhow::bail!("seccomp_network_not_denied");
         }
 
-        // If we managed to create a socket, seccomp isn't active.
-        anyhow::bail!("seccomp_network_not_denied");
+        #[cfg(not(target_os = "linux"))]
+        {
+            anyhow::bail!("seccomp_unavailable");
+        }
     }
 
     if std::env::var("ACIP_EXTRACTOR_SELFTEST_LARGE")
