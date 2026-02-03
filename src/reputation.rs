@@ -118,9 +118,9 @@ impl JsonFileReputationStore {
                 Ok(parsed) => parsed.records,
                 Err(err) => {
                     let quarantine = quarantine_path(&path);
-                    if let Err(rename_err) = fs::rename(&path, &quarantine) {
+                    if let Err(quarantine_err) = quarantine_corrupt_file(&path, &quarantine) {
                         tracing::warn!(
-                            error = %rename_err,
+                            error = %quarantine_err,
                             quarantine_path = %quarantine.display(),
                             "Failed to quarantine corrupt reputation file"
                         );
@@ -172,30 +172,57 @@ impl JsonFileReputationStore {
             let _ = temp_file.set_permissions(fs::Permissions::from_mode(0o600));
         }
         temp_file.write_all(raw.as_bytes())?;
-        #[cfg(unix)]
-        {
-            let _ = temp_file.sync_all();
+        if let Err(err) = temp_file.sync_all() {
+            tracing::warn!(
+                error = %err,
+                path = %temp_path.display(),
+                "Failed to fsync reputation temp file"
+            );
         }
         drop(temp_file);
-        #[cfg(unix)]
-        {
-            if let Ok(dir) = fs::File::open(parent) {
-                let _ = dir.sync_all();
-            }
-        }
 
         if let Err(err) = fs::rename(&temp_path, &self.path) {
             let _ = fs::remove_file(&temp_path);
             return Err(err.into());
         }
 
-        #[cfg(unix)]
-        {
-            if let Ok(dir) = fs::File::open(parent) {
-                let _ = dir.sync_all();
+        fsync_dir_best_effort(parent);
+        Ok(())
+    }
+}
+
+fn quarantine_corrupt_file(path: &Path, quarantine: &Path) -> anyhow::Result<()> {
+    if let Err(rename_err) = fs::rename(path, quarantine) {
+        tracing::warn!(
+            error = %rename_err,
+            source_path = %path.display(),
+            quarantine_path = %quarantine.display(),
+            "Rename failed while quarantining corrupt reputation file; attempting copy+remove"
+        );
+        fs::copy(path, quarantine)?;
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+fn fsync_dir_best_effort(path: &Path) {
+    match fs::File::open(path) {
+        Ok(dir) => {
+            if let Err(err) = dir.sync_all() {
+                tracing::warn!(
+                    error = %err,
+                    path = %path.display(),
+                    "Failed to fsync reputation directory"
+                );
             }
         }
-        Ok(())
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                path = %path.display(),
+                "Failed to open reputation directory for fsync"
+            );
+        }
     }
 }
 
