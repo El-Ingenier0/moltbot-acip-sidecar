@@ -42,6 +42,12 @@ services:
     environment:
       # Set to "live" when you have keys configured.
       - ACIP_SENTRY_MODE=stub
+
+      # Model policy (optional). Defaults shown:
+      - ACIP_L1_PROVIDER=gemini
+      - ACIP_L1_MODEL=gemini-2.0-flash
+      - ACIP_L2_PROVIDER=anthropic
+      - ACIP_L2_MODEL=claude-3-5-haiku-latest
     volumes:
       - /etc/acip/config.toml:/etc/acip/config.toml:ro
       - /etc/acip/secrets.env:/etc/acip/secrets.env:ro

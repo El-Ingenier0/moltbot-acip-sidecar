@@ -12,8 +12,39 @@ This service is intended to run as a small localhost HTTP daemon.
 
 - Rust toolchain (for building): `cargo`, `rustc`
 - systemd (for service install)
+- Optional (only if you want to bind a privileged port <1024 while still running unprivileged): `setcap` (Debian/Ubuntu: `libcap2-bin`)
 
-## Build
+## Quick install (recommended)
+
+Use the installer script (it will build, install, create config + secrets files if missing, install systemd unit, and start the service).
+
+```bash
+git clone https://github.com/El-Ingenier0/acip-sidecar.git
+cd acip-sidecar
+
+# Defaults:
+#   --port 18795
+#   --user acip_user --group acip_user
+#   --l1-model gemini-2.0-flash
+#   --l2-model claude-3-5-haiku-latest
+sudo ./scripts/install.sh
+```
+
+Common overrides:
+
+```bash
+sudo ./scripts/install.sh \
+  --port 18795 \
+  --user acip_user --group acip_user \
+  --l1-model gemini-2.0-flash \
+  --l2-model claude-3-5-haiku-latest
+```
+
+Notes:
+- On first install, the script will prompt (hidden input) for `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, and `ACIP_AUTH_TOKEN` and write them to `/etc/acip/secrets.env` (0600).
+- If you set `--port < 1024`, the installer will attempt to grant `CAP_NET_BIND_SERVICE` to `/opt/acip/acip-sidecar` via `setcap` so the service can still run as an unprivileged user.
+
+## Manual build
 
 ```bash
 git clone https://github.com/El-Ingenier0/acip-sidecar.git
@@ -25,7 +56,9 @@ Binary will be at:
 
 - `target/release/acip-sidecar`
 
-## Create service user/group
+## Manual install (if you don't use the installer)
+
+### Create service user/group
 
 ```bash
 sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin acip_user || true
@@ -69,6 +102,8 @@ ACIP_AUTH_TOKEN=...
 ```
 
 ## Install systemd unit
+
+> If you used `scripts/install.sh`, this is already done.
 
 Copy the unit template:
 

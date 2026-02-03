@@ -22,7 +22,8 @@ Use this to pick the right deployment mode for **acip-sidecar**.
 - **No** → **Mode C: systemd user service** (or run manually for dev)
 
 ### 3) Do you need a privileged TCP port (<1024) or other root-only pre-bind setup?
-- **Yes** → **Mode B: systemd global (root-drop)**
+- **Privileged port only (<1024)** → You can usually still use **Mode A** by granting `CAP_NET_BIND_SERVICE` to the binary (`setcap`) so the service runs unprivileged.
+- **Other root-only pre-bind steps** → **Mode B: systemd global (root-drop)**
 - **No** → **Mode A: systemd global (direct `acip_user`)**
 
 ### 4) Do you need a Unix domain socket (instead of TCP)?
@@ -66,7 +67,8 @@ Unit:
 ## Mode B — systemd global (optional): root-drop
 
 Use when:
-- You need to bind to a privileged port (<1024), or you must perform a root-only step before serving.
+- You must perform a root-only step before serving.
+- (Binding to a privileged port alone can usually be handled by `CAP_NET_BIND_SERVICE` instead.)
 
 Characteristics:
 - systemd starts as root; the process drops privileges to `acip_user` before serving.
