@@ -132,3 +132,4 @@ These env vars tune the **out-of-process extractor** (PDF/SVG hybrid extraction)
 
 - `ACIP_SENTRY_MODE=stub` disables model calls; `tools_allowed` stays false.
 - For HTML/SVG inputs, tools are hard-capped off by design.
+- Secrets handling is documented in `docs/secrets.md` (supported sources + precedence).
