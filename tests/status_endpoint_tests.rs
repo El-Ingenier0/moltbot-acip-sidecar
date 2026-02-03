@@ -22,6 +22,7 @@ fn app() -> Router {
             tail: 2,
             full_if_lte: 3,
         },
+        normalize: state::NormalizeSettings::from_config(None),
         http: reqwest::Client::new(),
         secrets: Arc::new(acip_sidecar::secrets::EnvStore),
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),

@@ -8,6 +8,7 @@ pub struct Config {
     pub server: Option<ServerConfig>,
     pub policy: Option<PolicyConfig>,
     pub security: Option<SecurityConfig>,
+    pub normalize: Option<NormalizeConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,6 +40,32 @@ pub struct SecurityConfig {
     pub allow_insecure_loopback: Option<bool>,
     pub require_token: Option<bool>,
     pub token_env: Option<String>,
+}
+
+pub const DEFAULT_NORMALIZE_MAX_INPUT_CHARS: usize = 400_000;
+pub const DEFAULT_NORMALIZE_WINDOW_HEAD_CHARS: usize = 200_000;
+pub const DEFAULT_NORMALIZE_WINDOW_TAIL_CHARS: usize = 200_000;
+
+fn default_normalize_max_input_chars() -> usize {
+    DEFAULT_NORMALIZE_MAX_INPUT_CHARS
+}
+
+fn default_normalize_window_head_chars() -> usize {
+    DEFAULT_NORMALIZE_WINDOW_HEAD_CHARS
+}
+
+fn default_normalize_window_tail_chars() -> usize {
+    DEFAULT_NORMALIZE_WINDOW_TAIL_CHARS
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NormalizeConfig {
+    #[serde(default = "default_normalize_max_input_chars")]
+    pub max_input_chars: usize,
+    #[serde(default = "default_normalize_window_head_chars")]
+    pub window_head_chars: usize,
+    #[serde(default = "default_normalize_window_tail_chars")]
+    pub window_tail_chars: usize,
 }
 
 impl Config {

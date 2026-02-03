@@ -18,6 +18,21 @@ head = 4000
 tail = 4000
 full_if_lte = 9000
 
+[normalize]
+# Markup normalization caps (HTML/SVG only).
+# When the raw markup exceeds max_input_chars, we normalize a window consisting
+# of window_head_chars + window_tail_chars with a marker inserted between:
+# "[...TRUNCATED_FOR_NORMALIZATION...]".
+#
+# Tradeoffs:
+# - Lower limits reduce parser CPU/memory and mitigate pathological inputs.
+# - Smaller head/tail windows can drop important context in the middle.
+# - Keep head + tail <= max_input_chars (marker adds extra chars) to avoid
+#   exceeding the intended cap.
+max_input_chars = 400000
+window_head_chars = 200000
+window_tail_chars = 200000
+
 [security]
 allow_insecure_loopback = true
 require_token = false

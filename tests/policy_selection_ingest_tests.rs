@@ -20,6 +20,7 @@ fn app() -> Router {
             tail: 4,
             full_if_lte: 6,
         },
+        normalize: state::NormalizeSettings::from_config(None),
         http: reqwest::Client::new(),
         secrets: Arc::new(secrets::EnvStore),
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),

@@ -21,8 +21,10 @@ pub fn build_app_state(
     policies: crate::policy_store::PolicyStore,
     reputation: Arc<dyn crate::reputation::ReputationStore>,
 ) -> Arc<state::AppState> {
+    let normalize = state::NormalizeSettings::from_config(None);
     Arc::new(state::AppState {
         policy,
+        normalize,
         http,
         secrets,
         policies,

@@ -234,6 +234,39 @@ fn apply_head_tail(policy: &state::Policy, text: &str) -> (String, bool) {
     (combined, true)
 }
 
+const NORMALIZE_TRUNCATION_MARKER: &str = "[...TRUNCATED_FOR_NORMALIZATION...]";
+
+fn build_normalization_window(input: &str, head_chars: usize, tail_chars: usize) -> String {
+    let head: String = input.chars().take(head_chars).collect();
+    let tail: String = input
+        .chars()
+        .rev()
+        .take(tail_chars)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    format!("{head}{NORMALIZE_TRUNCATION_MARKER}{tail}")
+}
+
+fn maybe_window_markup_input(
+    input: &str,
+    is_markup: bool,
+    settings: &state::NormalizeSettings,
+) -> (String, bool) {
+    if !is_markup {
+        return (input.to_string(), false);
+    }
+    let len = input.chars().count();
+    if len <= settings.max_input_chars {
+        return (input.to_string(), false);
+    }
+    (
+        build_normalization_window(input, settings.window_head_chars, settings.window_tail_chars),
+        true,
+    )
+}
+
 /// Main ingest endpoint.
 ///
 /// Note: the router wires this under `/v1/acip/ingest_source`.
@@ -605,10 +638,13 @@ pub async fn ingest_source(
     let is_svg = is_svg_like(&content_type, &raw);
     let is_markup = is_html || is_svg;
 
+    let (raw_for_normalization, windowed_for_normalization) =
+        maybe_window_markup_input(&raw, is_markup, &state.normalize);
+
     // Normalization pipeline: keep `raw` for audit/digest, but generate separate model-facing text.
-    let (model_text, normalized, normalization_steps) = if is_html {
+    let (model_text, normalized, mut normalization_steps) = if is_html {
         (
-            html_to_text(&raw),
+            html_to_text(&raw_for_normalization),
             true,
             vec![
                 "strip_active_html_blocks".to_string(),
@@ -618,13 +654,16 @@ pub async fn ingest_source(
         )
     } else if is_svg {
         (
-            svg_to_text(&raw),
+            svg_to_text(&raw_for_normalization),
             true,
             vec!["svg_to_text".to_string(), "drop_script_style".to_string()],
         )
     } else {
         (raw.clone(), false, vec![])
     };
+    if windowed_for_normalization {
+        normalization_steps.insert(0, "window_markup_input".to_string());
+    }
 
     let original_length_chars = raw.chars().count();
     let model_length_chars = model_text.chars().count();
@@ -859,4 +898,44 @@ pub async fn ingest_source(
     };
 
     (StatusCode::OK, Json(resp)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windowing_keeps_tail_marker_for_large_html() {
+        let settings = state::NormalizeSettings {
+            max_input_chars: 120,
+            window_head_chars: 40,
+            window_tail_chars: 40,
+        };
+        let tail_marker = "TAIL_ONLY_MARKER";
+        let html = format!(
+            "<html><body>{}{}</body></html>",
+            "a".repeat(200),
+            tail_marker
+        );
+
+        let (windowed, did_window) = maybe_window_markup_input(&html, true, &settings);
+        assert!(did_window);
+        assert!(windowed.contains(tail_marker));
+        assert!(windowed.contains(NORMALIZE_TRUNCATION_MARKER));
+    }
+
+    #[test]
+    fn windowing_skips_non_markup_inputs() {
+        let settings = state::NormalizeSettings {
+            max_input_chars: 20,
+            window_head_chars: 5,
+            window_tail_chars: 5,
+        };
+        let text = "x".repeat(100);
+
+        let (windowed, did_window) = maybe_window_markup_input(&text, false, &settings);
+        assert!(!did_window);
+        assert_eq!(windowed, text);
+        assert!(!windowed.contains(NORMALIZE_TRUNCATION_MARKER));
+    }
 }
