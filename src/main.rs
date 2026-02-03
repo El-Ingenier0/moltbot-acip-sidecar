@@ -390,12 +390,15 @@ async fn main() -> anyhow::Result<()> {
         warn!("ANTHROPIC_API_KEY not set (ok for v0.1; required for Anthropic L2 fallback)");
     }
 
+    let normalize = state::NormalizeSettings::from_config(config.as_ref().and_then(|c| c.normalize.as_ref()));
+
     let state = app_state_builder::build_app_state(
         state::Policy {
             head: effective_head,
             tail: effective_tail,
             full_if_lte: effective_full_if_lte,
         },
+        normalize,
         http,
         secrets,
         policies,

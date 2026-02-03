@@ -33,6 +33,14 @@ max_input_chars = 400000
 window_head_chars = 200000
 window_tail_chars = 200000
 
+# Adversarial markup detection (signal only): if triggered, tighten the above caps.
+# This is NOT a security boundary; it simply reduces workload on suspicious inputs.
+#
+# threshold: combined severity score from xml_scan + html_scan.
+adversarial_threshold = 3
+# factor: multiplier applied to caps when adversarial_threshold is met.
+adversarial_tighten_factor = 0.5
+
 [security]
 allow_insecure_loopback = true
 require_token = false

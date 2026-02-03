@@ -1,6 +1,6 @@
 use crate::{
-    extract, introspection, normalize, reputation, reputation_policy, routes, sentry, state, threat,
-    xml_scan,
+    extract, html_scan, introspection, normalize, reputation, reputation_policy, routes, sentry,
+    state, threat, xml_scan,
 };
 use axum::{
     extract::State,
@@ -609,16 +609,42 @@ pub async fn ingest_source(
     let is_svg = is_svg_like(&content_type, &raw);
     let is_markup = is_html || is_svg;
 
+    // Adversarial markup detection (signal only): if suspicious, tighten normalization caps.
+    let mut eff_norm = state.normalize.clone();
+    let mut html_scan_res = html_scan::HtmlScanResult::default();
+    let mut xml_scan_res = xml_scan::XmlScanResult::default();
+    let mut combined_sev: u8 = 0;
+    let mut tightened_for_adversarial = false;
+    if is_markup {
+        html_scan_res = html_scan::scan(&raw);
+        xml_scan_res = xml_scan::scan(&raw);
+        combined_sev = html_scan_res.severity.saturating_add(xml_scan_res.severity);
+        if combined_sev >= eff_norm.adversarial_threshold {
+            let factor = eff_norm.adversarial_tighten_factor;
+            // Clamp factor defensively.
+            let f = if (0.0..=1.0).contains(&factor) {
+                factor
+            } else {
+                crate::config::DEFAULT_NORMALIZE_ADVERSARIAL_TIGHTEN_FACTOR
+            };
+            let min_cap: usize = 10_000;
+            let new_max = ((eff_norm.max_input_chars as f64) * f).floor() as usize;
+            let new_head = ((eff_norm.window_head_chars as f64) * f).floor() as usize;
+            let new_tail = ((eff_norm.window_tail_chars as f64) * f).floor() as usize;
+            eff_norm.max_input_chars = new_max.max(min_cap);
+            eff_norm.window_head_chars = new_head.max(min_cap / 2);
+            eff_norm.window_tail_chars = new_tail.max(min_cap / 2);
+            tightened_for_adversarial = true;
+        }
+    }
+
     let (raw_for_normalization, windowed_for_normalization) =
-        maybe_window_markup_input(&raw, is_markup, &state.normalize);
+        maybe_window_markup_input(&raw, is_markup, &eff_norm);
 
     // Normalization pipeline: keep `raw` for audit/digest, but generate separate model-facing text.
     let (model_text, normalized, mut normalization_steps) = if is_html {
         (
-            normalize::html_to_text_html5ever_with_limit(
-                &raw_for_normalization,
-                state.normalize.max_input_chars,
-            ),
+            normalize::html_to_text_html5ever_with_limit(&raw_for_normalization, eff_norm.max_input_chars),
             true,
             vec!["html_to_text_html5ever".to_string()],
         )
@@ -634,6 +660,9 @@ pub async fn ingest_source(
     if windowed_for_normalization {
         normalization_steps.insert(0, "window_markup_input".to_string());
     }
+    if tightened_for_adversarial {
+        normalization_steps.insert(0, format!("adversarial_tighten:sev={}", combined_sev));
+    }
 
     let original_length_chars = raw.chars().count();
     let model_length_chars = model_text.chars().count();
@@ -643,12 +672,20 @@ pub async fn ingest_source(
     // Cheap XML/SVG/HTML red-flag scan (pre-parse style signals). This does not replace
     // sandboxing/rlimits; it's for scoring + audit visibility.
     if is_markup {
-        let scan = xml_scan::scan(&raw);
-        if scan.severity > 0 {
-            threat_full.threat_score = threat_full.threat_score.saturating_add(scan.severity);
-            for m in scan.matches {
+        if xml_scan_res.severity > 0 {
+            threat_full.threat_score = threat_full.threat_score.saturating_add(xml_scan_res.severity);
+            for m in xml_scan_res.matches.clone() {
                 threat_full.indicators.push(format!("xml_scan:{}", m));
             }
+        }
+        if html_scan_res.severity > 0 {
+            threat_full.threat_score = threat_full.threat_score.saturating_add(html_scan_res.severity);
+            for m in html_scan_res.matches.clone() {
+                threat_full.indicators.push(format!("html_scan:{}", m));
+            }
+        }
+        if tightened_for_adversarial {
+            threat_full.indicators.push(format!("adversarial_tighten:sev={}", combined_sev));
         }
     }
 
@@ -976,6 +1013,8 @@ mod tests {
             max_input_chars: 120,
             window_head_chars: 40,
             window_tail_chars: 40,
+            adversarial_threshold: 3,
+            adversarial_tighten_factor: 0.5,
         };
         let tail_marker = "TAIL_ONLY_MARKER";
         let html = format!(
@@ -996,6 +1035,8 @@ mod tests {
             max_input_chars: 20,
             window_head_chars: 5,
             window_tail_chars: 5,
+            adversarial_threshold: 3,
+            adversarial_tighten_factor: 0.5,
         };
         let text = "x".repeat(100);
 

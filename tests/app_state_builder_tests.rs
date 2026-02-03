@@ -22,6 +22,7 @@ fn build_app_state_wires_fields() {
             tail: 2,
             full_if_lte: 3,
         },
+        state::NormalizeSettings::from_config(None),
         http,
         Arc::new(secrets::EnvStore),
         policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),

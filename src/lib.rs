@@ -2,6 +2,7 @@ pub mod app;
 pub mod app_state_builder;
 pub mod config;
 pub mod extract;
+pub mod html_scan;
 pub mod ingest;
 pub mod introspection;
 pub mod model_policy;

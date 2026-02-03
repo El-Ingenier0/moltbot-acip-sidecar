@@ -46,6 +46,9 @@ pub const DEFAULT_NORMALIZE_MAX_INPUT_CHARS: usize = 400_000;
 pub const DEFAULT_NORMALIZE_WINDOW_HEAD_CHARS: usize = 200_000;
 pub const DEFAULT_NORMALIZE_WINDOW_TAIL_CHARS: usize = 200_000;
 
+pub const DEFAULT_NORMALIZE_ADVERSARIAL_THRESHOLD: u8 = 3;
+pub const DEFAULT_NORMALIZE_ADVERSARIAL_TIGHTEN_FACTOR: f64 = 0.5;
+
 fn default_normalize_max_input_chars() -> usize {
     DEFAULT_NORMALIZE_MAX_INPUT_CHARS
 }
@@ -58,6 +61,14 @@ fn default_normalize_window_tail_chars() -> usize {
     DEFAULT_NORMALIZE_WINDOW_TAIL_CHARS
 }
 
+fn default_normalize_adversarial_threshold() -> u8 {
+    DEFAULT_NORMALIZE_ADVERSARIAL_THRESHOLD
+}
+
+fn default_normalize_adversarial_tighten_factor() -> f64 {
+    DEFAULT_NORMALIZE_ADVERSARIAL_TIGHTEN_FACTOR
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct NormalizeConfig {
     #[serde(default = "default_normalize_max_input_chars")]
@@ -66,6 +77,14 @@ pub struct NormalizeConfig {
     pub window_head_chars: usize,
     #[serde(default = "default_normalize_window_tail_chars")]
     pub window_tail_chars: usize,
+
+    /// Heuristic threshold for treating markup as adversarial.
+    #[serde(default = "default_normalize_adversarial_threshold")]
+    pub adversarial_threshold: u8,
+
+    /// Factor to tighten caps when adversarial markup is detected.
+    #[serde(default = "default_normalize_adversarial_tighten_factor")]
+    pub adversarial_tighten_factor: f64,
 }
 
 impl Config {

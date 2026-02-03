@@ -16,12 +16,12 @@ pub fn build_http_client() -> Result<Client> {
 /// This is a small helper to keep `main.rs` focused on config/CLI parsing and server wiring.
 pub fn build_app_state(
     policy: state::Policy,
+    normalize: state::NormalizeSettings,
     http: Client,
     secrets: Arc<dyn secrets::SecretStore>,
     policies: crate::policy_store::PolicyStore,
     reputation: Arc<dyn crate::reputation::ReputationStore>,
 ) -> Arc<state::AppState> {
-    let normalize = state::NormalizeSettings::from_config(None);
     Arc::new(state::AppState {
         policy,
         normalize,
