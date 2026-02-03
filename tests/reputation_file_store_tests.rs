@@ -1,4 +1,5 @@
 use acip_sidecar::reputation::{JsonFileReputationStore, ReputationStore};
+use std::fs;
 
 #[test]
 fn json_file_store_persists_across_reload() {
@@ -29,4 +30,40 @@ fn json_file_store_persists_across_reload() {
         assert!(host.seen_count >= 1);
         assert!(host.risk_score >= 10);
     }
+}
+
+#[test]
+fn json_file_store_quarantines_corrupt_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("rep.json");
+
+    fs::write(&path, "{this is not valid json").unwrap();
+
+    let store = JsonFileReputationStore::load_or_create(&path).unwrap();
+    assert!(store.get("source_id:missing").is_none());
+
+    let recs = store.record(acip_sidecar::reputation::observation(
+        "source-a".to_string(),
+        None,
+        7,
+        vec![],
+    ));
+    let src = recs
+        .iter()
+        .find(|rec| rec.key == "source_id:source-a")
+        .unwrap();
+    assert_eq!(src.seen_count, 1);
+    assert_eq!(src.risk_score, 7);
+
+    let mut quarantined = false;
+    for entry in fs::read_dir(dir.path()).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("rep.json.corrupt.") {
+            quarantined = true;
+            break;
+        }
+    }
+    assert!(quarantined);
 }

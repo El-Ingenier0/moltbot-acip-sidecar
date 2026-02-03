@@ -2,10 +2,14 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ReputationRecord {
@@ -110,8 +114,26 @@ impl JsonFileReputationStore {
         let path = path.as_ref().to_path_buf();
         let map = if path.exists() {
             let raw = fs::read_to_string(&path)?;
-            let parsed: JsonStoreFile = serde_json::from_str(&raw)?;
-            parsed.records
+            match serde_json::from_str::<JsonStoreFile>(&raw) {
+                Ok(parsed) => parsed.records,
+                Err(err) => {
+                    let quarantine = quarantine_path(&path);
+                    if let Err(rename_err) = fs::rename(&path, &quarantine) {
+                        tracing::warn!(
+                            error = %rename_err,
+                            quarantine_path = %quarantine.display(),
+                            "Failed to quarantine corrupt reputation file"
+                        );
+                    } else {
+                        tracing::warn!(
+                            error = %err,
+                            quarantine_path = %quarantine.display(),
+                            "Quarantined corrupt reputation file after JSON parse failure"
+                        );
+                    }
+                    HashMap::new()
+                }
+            }
         } else {
             HashMap::new()
         };
@@ -128,16 +150,75 @@ impl JsonFileReputationStore {
     }
 
     fn persist(&self, map: &HashMap<String, ReputationRecord>) -> anyhow::Result<()> {
-        if let Some(parent) = self.path.parent() {
+        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
         }
         let file = JsonStoreFile {
             records: map.clone(),
         };
         let raw = serde_json::to_string_pretty(&file)?;
-        fs::write(&self.path, raw)?;
+        let temp_path = temp_path_for(&self.path, parent);
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            options.mode(0o600);
+        }
+
+        let mut temp_file = options.open(&temp_path)?;
+        #[cfg(unix)]
+        {
+            let _ = temp_file.set_permissions(fs::Permissions::from_mode(0o600));
+        }
+        temp_file.write_all(raw.as_bytes())?;
+        #[cfg(unix)]
+        {
+            let _ = temp_file.sync_all();
+        }
+        drop(temp_file);
+        #[cfg(unix)]
+        {
+            if let Ok(dir) = fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+        }
+
+        if let Err(err) = fs::rename(&temp_path, &self.path) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(err.into());
+        }
+
+        #[cfg(unix)]
+        {
+            if let Ok(dir) = fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+        }
         Ok(())
     }
+}
+
+fn quarantine_path(path: &Path) -> PathBuf {
+    let ts = now_unix();
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("reputation.json");
+    path.with_file_name(format!("{}.corrupt.{}", file_name, ts))
+}
+
+fn temp_path_for(path: &Path, parent: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("reputation.json");
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
+    parent.join(format!(".{}.tmp.{}.{}", file_name, pid, nanos))
 }
 
 impl ReputationStore for JsonFileReputationStore {
