@@ -53,8 +53,29 @@ main() {
   fi
 
   if [[ ! -f "${ETC_DIR}/secrets.env" ]]; then
-    echo "Creating empty ${ETC_DIR}/secrets.env (YOU MUST FILL THIS IN)"
+    echo "[secrets] Creating ${ETC_DIR}/secrets.env (mode 0600)"
     install -m 0600 /dev/null "${ETC_DIR}/secrets.env"
+
+    echo "[secrets] Enter required secrets now (input hidden)."
+    echo "         Leave blank to skip; you can edit ${ETC_DIR}/secrets.env later."
+
+    read -r -s -p "GEMINI_API_KEY: " gemini_key; echo
+    read -r -s -p "ANTHROPIC_API_KEY: " anthropic_key; echo
+    read -r -s -p "ACIP_AUTH_TOKEN (recommended): " acip_token; echo
+
+    {
+      echo "# Required for live sentry mode:"
+      [[ -n "${gemini_key}" ]] && echo "GEMINI_API_KEY=${gemini_key}"
+      [[ -n "${anthropic_key}" ]] && echo "ANTHROPIC_API_KEY=${anthropic_key}"
+      echo
+      echo "# Auth token for callers (recommended):"
+      [[ -n "${acip_token}" ]] && echo "ACIP_AUTH_TOKEN=${acip_token}"
+      echo
+    } >>"${ETC_DIR}/secrets.env"
+
+    chmod 0600 "${ETC_DIR}/secrets.env" 2>/dev/null || true
+  else
+    echo "[secrets] Leaving existing ${ETC_DIR}/secrets.env in place"
   fi
 
   echo "[4/5] Installing systemd user unit"
