@@ -7,6 +7,11 @@
 
 ## 2026-02-03
 
+- 2026-02-03T16:51:15-06:00 4aed046 docs: update installation docs for installer flags, model env, privileged ports
+- 2026-02-03T16:50:01-06:00 65f8ac1 install: if --port <1024, setcap CAP_NET_BIND_SERVICE on binary
+- 2026-02-03T16:48:32-06:00 ddbb712 install: add --port/--user/--group for system install (defaults), set systemd drop-in
+- 2026-02-03T16:42:15-06:00 111abde install: add --l1-model/--l2-model; infer provider; write systemd drop-ins
+- 2026-02-03T16:39:37-06:00 774d089 install: prompt for secrets on first install (hidden input, 0600)
 - 2026-02-03T15:57:22-06:00 0d4b8032eff5 tests: accept bracketed IPv6 host_str behavior
 - 2026-02-03T15:56:23-06:00 f474cd5bb681 Merge PR-5: resolve ingest.rs test conflicts
 - 2026-02-03T15:41:47-06:00 f4a9ee270068 Merge PR-3C: adversarial markup scan + cap tightening
