@@ -16,6 +16,8 @@ podman build -t acip-sidecar:latest .
 
 ## Run (Docker)
 
+### Minimal `docker run`
+
 Mount your config + secrets:
 
 ```bash
@@ -26,6 +28,30 @@ docker run --rm \
   -e ACIP_SENTRY_MODE=stub \
   acip-sidecar:latest
 ```
+
+### Docker Compose (recommended)
+
+Example `docker-compose.yml` snippet:
+
+```yaml
+services:
+  acip-sidecar:
+    image: acip-sidecar:latest
+    ports:
+      - "127.0.0.1:18795:18795"
+    environment:
+      # Set to "live" when you have keys configured.
+      - ACIP_SENTRY_MODE=stub
+    volumes:
+      - /etc/acip/config.toml:/etc/acip/config.toml:ro
+      - /etc/acip/secrets.env:/etc/acip/secrets.env:ro
+    # Strong isolation if you can tolerate it (prevents outbound model calls):
+    # network_mode: "none"
+```
+
+Notes:
+- The container defaults to `--config /etc/acip/config.toml` (see Dockerfile CMD).
+- For compose-based deployments, `acipctl config set --restart docker-compose` prints the restart command.
 
 ### No-network mode (recommended)
 

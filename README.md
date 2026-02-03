@@ -66,8 +66,20 @@ acipctl --url http://127.0.0.1:18795 ingest-file \
   ./some.pdf
 ```
 
-## API (draft)
-See `docs/api.md`.
+## API
+
+See:
+- `docs/api.md`
+
+## Troubleshooting
+
+See:
+- `docs/troubleshooting.md`
+
+## acipctl
+
+See:
+- `docs/acipctl.md`
 
 ## Security
 - **Never** commit API keys.

@@ -4,6 +4,34 @@
 
 Purpose: ingest *untrusted* external content and return **fenced** content + tool gating.
 
+### Request headers
+
+- `Content-Type: application/json`
+
+Optional auth headers:
+- `X-ACIP-Token: <token>`
+  - Required when the server is configured to require a token.
+  - Token value is read from the environment variable named by `security.token_env` (default: `ACIP_AUTH_TOKEN`).
+
+Optional tool authorization:
+- `X-ACIP-Allow-Tools: true`
+  - Opt-in only. Even with this header, markup inputs (HTML/SVG) are hard-capped to `tools_allowed=false`.
+
+### Token requirement behavior
+
+Token requirement is controlled by config:
+
+```toml
+[security]
+require_token = true
+allow_insecure_loopback = true   # if true, loopback requests may omit token
+token_env = "ACIP_AUTH_TOKEN"
+```
+
+Notes:
+- If binding to loopback (`127.0.0.1`), the default behavior may allow requests without `X-ACIP-Token`.
+- To force token auth even on loopback, set `allow_insecure_loopback=false` and `require_token=true`.
+
 ### Request (JSON)
 ```json
 {
