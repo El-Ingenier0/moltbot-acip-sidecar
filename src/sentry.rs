@@ -94,9 +94,30 @@ fn extract_json_only(s: &str) -> &str {
     s
 }
 
+fn salvage_enabled() -> bool {
+    std::env::var("ACIP_SENTRY_JSON_SALVAGE")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
+fn parse_json_strict(raw: &str) -> Result<Value> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("model output is not valid JSON"));
+    }
+    let v: Value = serde_json::from_str(trimmed).context("model output is not valid JSON")?;
+    if !matches!(v, Value::Object(_) | Value::Array(_)) {
+        return Err(anyhow!("model output must be a JSON object or array"));
+    }
+    Ok(v)
+}
+
 pub fn parse_and_validate_decision(raw: &str) -> Result<Decision> {
-    let slice = extract_json_only(raw);
-    let v: Value = serde_json::from_str(slice).context("model output is not valid JSON")?;
+    let v = if salvage_enabled() {
+        parse_json_strict(raw).or_else(|_| parse_json_strict(extract_json_only(raw)))?
+    } else {
+        parse_json_strict(raw)?
+    };
 
     let compiled = &*DECISION_SCHEMA;
     if let Err(mut errs) = compiled.validate(&v) {
