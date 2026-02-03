@@ -1,5 +1,5 @@
 use axum::{body::Body, http::Request, http::StatusCode, Router};
-use moltbot_acip_sidecar::{policy_store, secrets, state};
+use acip_sidecar::{policy_store, secrets, state};
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -7,11 +7,11 @@ fn app() -> Router {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
     policies.insert(
         "strict".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = Arc::new(state::AppState {
@@ -23,7 +23,7 @@ fn app() -> Router {
         http: reqwest::Client::new(),
         secrets: Arc::new(secrets::EnvStore),
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),
-        reputation: Arc::new(moltbot_acip_sidecar::reputation::InMemoryReputationStore::new()),
+        reputation: Arc::new(acip_sidecar::reputation::InMemoryReputationStore::new()),
     });
 
     // Reuse the ingest handler from main.rs logic isn't possible here, so we just verify
@@ -32,7 +32,7 @@ fn app() -> Router {
     Router::new()
         .route(
             "/v1/acip/policy",
-            axum::routing::get(moltbot_acip_sidecar::routes::get_policy),
+            axum::routing::get(acip_sidecar::routes::get_policy),
         )
         .with_state(st)
 }

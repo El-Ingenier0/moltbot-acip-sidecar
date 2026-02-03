@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::xml_scan;
+use acip_sidecar::xml_scan;
 
 #[test]
 fn detects_doctype_and_entity() {

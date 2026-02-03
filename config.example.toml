@@ -1,11 +1,16 @@
 [service]
-user = "acip"
-group = "acip"
+# If running as root (e.g., systemd service), the sidecar can drop privileges
+# to the configured user/group before serving.
+# If running as non-root, enforce_identity=true requires the process already
+# matches the configured identity.
+user = "acip_user"
+group = "acip_user"
 enforce_identity = true
 
 [server]
 host = "127.0.0.1"
 port = 18795
+# unix_socket = "/run/acip/acip-sidecar.sock"
 
 [policy]
 # policies_file = "/etc/acip/policies.json"

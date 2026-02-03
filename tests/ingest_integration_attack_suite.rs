@@ -4,8 +4,8 @@ use axum::{
     routing::post,
     Router,
 };
-use moltbot_acip_sidecar::reputation::ReputationStore;
-use moltbot_acip_sidecar::{app, ingest, policy_store, reputation, secrets, state};
+use acip_sidecar::reputation::ReputationStore;
+use acip_sidecar::{app, ingest, policy_store, reputation, secrets, state};
 use serde_json::Value;
 use std::sync::{Arc, Once};
 use tower::ServiceExt;
@@ -29,7 +29,7 @@ fn router_with_state(rep: Arc<reputation::InMemoryReputationStore>) -> Router {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = Arc::new(state::AppState {

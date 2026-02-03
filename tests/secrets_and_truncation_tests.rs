@@ -1,6 +1,6 @@
-use moltbot_acip_sidecar::secrets;
-use moltbot_acip_sidecar::secrets::SecretStore;
-use moltbot_acip_sidecar::state;
+use acip_sidecar::secrets;
+use acip_sidecar::secrets::SecretStore;
+use acip_sidecar::state;
 use std::fs;
 use tempfile::tempdir;
 

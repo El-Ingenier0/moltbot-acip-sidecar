@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::startup;
+use acip_sidecar::startup;
 use std::sync::Arc;
 
 #[test]
@@ -24,8 +24,8 @@ fn build_policy_store_uses_file_when_provided() {
     )
     .unwrap();
 
-    let secrets = Arc::new(moltbot_acip_sidecar::secrets::EnvStore)
-        as Arc<dyn moltbot_acip_sidecar::secrets::SecretStore>;
+    let secrets = Arc::new(acip_sidecar::secrets::EnvStore)
+        as Arc<dyn acip_sidecar::secrets::SecretStore>;
 
     let store = startup::build_policy_store(&secrets, Some(path)).unwrap();
     assert!(store.get("default").is_some());
@@ -40,20 +40,20 @@ fn build_policy_store_falls_back_to_env_defaults() {
     std::env::set_var("ACIP_L2_PROVIDER", "anthropic");
     std::env::set_var("ACIP_L2_MODEL", "claude-3-5-sonnet");
 
-    let secrets = Arc::new(moltbot_acip_sidecar::secrets::EnvStore)
-        as Arc<dyn moltbot_acip_sidecar::secrets::SecretStore>;
+    let secrets = Arc::new(acip_sidecar::secrets::EnvStore)
+        as Arc<dyn acip_sidecar::secrets::SecretStore>;
 
     let store = startup::build_policy_store(&secrets, None).unwrap();
     let p = store.get("default").unwrap();
 
     assert!(matches!(
         p.l1.provider,
-        moltbot_acip_sidecar::model_policy::Provider::Gemini
+        acip_sidecar::model_policy::Provider::Gemini
     ));
     assert_eq!(p.l1.model, "gemini-1.5-flash");
     assert!(matches!(
         p.l2.provider,
-        moltbot_acip_sidecar::model_policy::Provider::Anthropic
+        acip_sidecar::model_policy::Provider::Anthropic
     ));
     assert_eq!(p.l2.model, "claude-3-5-sonnet");
 }

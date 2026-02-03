@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use moltbot_acip_sidecar::{app, ingest, policy_store, reputation, secrets, state};
+use acip_sidecar::{app, ingest, policy_store, reputation, secrets, state};
 use serde_json::Value;
 use std::{
     process::Command,
@@ -41,7 +41,7 @@ fn router() -> Router {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = Arc::new(state::AppState {

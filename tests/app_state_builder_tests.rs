@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::{app_state_builder, policy_store, reputation, secrets, state};
+use acip_sidecar::{app_state_builder, policy_store, reputation, secrets, state};
 use std::sync::Arc;
 
 #[test]
@@ -13,7 +13,7 @@ fn build_app_state_wires_fields() {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = app_state_builder::build_app_state(

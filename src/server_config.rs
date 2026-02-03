@@ -11,6 +11,7 @@ pub const DEFAULT_FULL_IF_LTE: usize = 9000;
 pub struct CliOverrides {
     pub host: Option<String>,
     pub port: Option<u16>,
+    pub unix_socket: Option<PathBuf>,
     pub head: Option<usize>,
     pub tail: Option<usize>,
     pub full_if_lte: Option<usize>,
@@ -21,6 +22,7 @@ pub struct CliOverrides {
 pub struct EffectiveSettings {
     pub host: String,
     pub port: u16,
+    pub unix_socket: Option<PathBuf>,
     pub head: usize,
     pub tail: usize,
     pub full_if_lte: usize,
@@ -51,6 +53,12 @@ pub fn effective_settings(cli: &CliOverrides, cfg: Option<&config::Config>) -> E
         .or_else(|| cfg_server.and_then(|s| s.port))
         .unwrap_or(DEFAULT_PORT);
 
+    let unix_socket: Option<PathBuf> = cli.unix_socket.clone().or_else(|| {
+        cfg_server
+            .and_then(|s| s.unix_socket.as_ref())
+            .map(PathBuf::from)
+    });
+
     let head = cli
         .head
         .or_else(|| cfg_policy.and_then(|p| p.head))
@@ -75,6 +83,7 @@ pub fn effective_settings(cli: &CliOverrides, cfg: Option<&config::Config>) -> E
     EffectiveSettings {
         host,
         port,
+        unix_socket,
         head,
         tail,
         full_if_lte,

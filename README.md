@@ -1,6 +1,6 @@
-# moltbot-acip-sidecar
+# acip-sidecar
 
-**MoltBot ACIP Sidecar**: an ingestion/sentry sidecar service that enforces the invariant:
+**ACIP Sidecar**: a reusable ingestion/sentry sidecar service that enforces the invariant:
 
 > Only *sentry-fenced* content may be appended to the model context, regardless of acquisition method.
 
@@ -17,7 +17,7 @@ This repo is intended to be a small localhost HTTP service (Rust) that:
 
 ## Status
 - v0.1: running axum server + deterministic truncation + fenced output
-- v0.2 (next): model sentry (Gemini Flash L1 → Haiku L2 fallback) + strict JSON schema
+- v0.2: model sentry (L1 → L2 fallback) + strict JSON schema + PDF/SVG sandbox extraction
 
 ## Secrets
 For development you can use a local `.env` file (gitignored) *if* it is private:
@@ -34,6 +34,29 @@ For system installs, prefer `/etc/acip/secrets.env`.
 Secrets resolution order when `--secrets-file` is provided:
 1) secrets file
 2) process environment
+
+## CLI (configuration + exercise)
+
+`acipctl` is a small companion CLI so the sidecar is fully configurable/usable even when it runs in Docker.
+
+Examples:
+```bash
+# Print example config
+acipctl config example > /etc/acip/config.toml
+
+# Validate config
+acipctl config validate --path /etc/acip/config.toml
+
+# Health check
+acipctl --url http://127.0.0.1:18795 health
+
+# Ingest a PDF (prints JSON response)
+acipctl --url http://127.0.0.1:18795 ingest-file \
+  --source-id demo \
+  --source-type pdf \
+  --content-type application/pdf \
+  ./some.pdf
+```
 
 ## API (draft)
 See `docs/api.md`.

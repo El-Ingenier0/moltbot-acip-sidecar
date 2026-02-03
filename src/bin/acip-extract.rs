@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use moltbot_acip_sidecar::extract::{self, ExtractRequest};
+use acip_sidecar::extract::{self, ExtractRequest};
 use std::io::{Read, Write};
 
 fn main() -> Result<()> {

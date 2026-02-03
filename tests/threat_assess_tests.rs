@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::threat::{assess, AttackType};
+use acip_sidecar::threat::{assess, AttackType};
 
 #[test]
 fn detects_prompt_injection_phrases() {

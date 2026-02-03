@@ -10,8 +10,8 @@ set -euo pipefail
 
 PREFIX_BIN="$HOME/.local/bin"
 ETC_DIR="$HOME/.config/acip"
-UNIT_SRC="packaging/moltbot-acip-sidecar.user.service"
-UNIT_DST="$HOME/.config/systemd/user/moltbot-acip-sidecar.service"
+UNIT_SRC="packaging/acip-sidecar.user.service"
+UNIT_DST="$HOME/.config/systemd/user/acip-sidecar.service"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -31,7 +31,7 @@ main() {
 
   echo "WARNING: Installing as a *user* service trades away key isolation hardening." 
   echo "- The sidecar and extractor run with your user permissions (no dedicated service user)." 
-  echo "- Best isolation/hardening requires the system service install (root) running as user 'acip'." 
+  echo "- Best isolation/hardening requires the system service install (root) running as user 'acip_user'." 
   echo "Proceeding with user-mode install..."
   echo
 
@@ -40,7 +40,7 @@ main() {
 
   echo "[2/5] Installing binary to ${PREFIX_BIN}"
   install -d -m 0755 "${PREFIX_BIN}"
-  install -m 0755 target/release/moltbot-acip-sidecar "${PREFIX_BIN}/moltbot-acip-sidecar"
+  install -m 0755 target/release/acip-sidecar "${PREFIX_BIN}/acip-sidecar"
 
   echo "[3/5] Ensuring ${ETC_DIR} exists"
   install -d -m 0700 "${ETC_DIR}"
@@ -64,12 +64,12 @@ main() {
   systemctl --user daemon-reload
 
   echo "[5/5] Enabling and starting service"
-  systemctl --user enable --now moltbot-acip-sidecar
+  systemctl --user enable --now acip-sidecar
 
   echo "Done. Next steps:"
   echo "- Edit ${ETC_DIR}/secrets.env (API keys + ACIP_AUTH_TOKEN)"
-  echo "- Restart: systemctl --user restart moltbot-acip-sidecar"
-  echo "- Logs: journalctl --user -u moltbot-acip-sidecar -f"
+  echo "- Restart: systemctl --user restart acip-sidecar"
+  echo "- Logs: journalctl --user -u acip-sidecar -f"
   echo "- Health: curl -sS http://127.0.0.1:18795/health"
   echo "- Optional: keep running after logout: loginctl enable-linger $USER"
 }

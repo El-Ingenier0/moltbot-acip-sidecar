@@ -1,6 +1,6 @@
 # Container runtime (Docker / Podman)
 
-Goal: run `moltbot-acip-sidecar` with **PDF/SVG extraction enabled** (Poppler + Tesseract) in a container.
+Goal: run `acip-sidecar` with **PDF/SVG extraction enabled** (Poppler + Tesseract) in a container.
 
 ## Build
 

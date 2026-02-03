@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::{config, server_config};
+use acip_sidecar::{config, server_config};
 
 #[test]
 fn token_env_defaults_when_missing() {

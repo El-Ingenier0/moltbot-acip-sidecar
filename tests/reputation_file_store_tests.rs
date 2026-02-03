@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::reputation::{JsonFileReputationStore, ReputationStore};
+use acip_sidecar::reputation::{JsonFileReputationStore, ReputationStore};
 
 #[test]
 fn json_file_store_persists_across_reload() {
@@ -8,7 +8,7 @@ fn json_file_store_persists_across_reload() {
     // First run: record an observation.
     {
         let store = JsonFileReputationStore::load_or_create(&path).unwrap();
-        let recs = store.record(moltbot_acip_sidecar::reputation::observation(
+        let recs = store.record(acip_sidecar::reputation::observation(
             "source-a".to_string(),
             Some("example.com".to_string()),
             10,

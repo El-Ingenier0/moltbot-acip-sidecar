@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use moltbot_acip_sidecar::{app, policy_store, reputation, secrets, state};
+use acip_sidecar::{app, policy_store, reputation, secrets, state};
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -11,7 +11,7 @@ fn app_with_token(token: Option<String>) -> Router {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = Arc::new(state::AppState {

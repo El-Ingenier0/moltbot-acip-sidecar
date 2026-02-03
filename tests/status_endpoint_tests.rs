@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Router,
 };
-use moltbot_acip_sidecar::{policy_store, routes, state};
+use acip_sidecar::{policy_store, routes, state};
 use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -13,7 +13,7 @@ fn app() -> Router {
     let mut policies = std::collections::BTreeMap::new();
     policies.insert(
         "default".to_string(),
-        moltbot_acip_sidecar::model_policy::PolicyConfig::default(),
+        acip_sidecar::model_policy::PolicyConfig::default(),
     );
 
     let st = Arc::new(state::AppState {
@@ -23,15 +23,15 @@ fn app() -> Router {
             full_if_lte: 3,
         },
         http: reqwest::Client::new(),
-        secrets: Arc::new(moltbot_acip_sidecar::secrets::EnvStore),
+        secrets: Arc::new(acip_sidecar::secrets::EnvStore),
         policies: policy_store::PolicyStore::from_file(policy_store::PoliciesFile { policies }),
-        reputation: Arc::new(moltbot_acip_sidecar::reputation::InMemoryReputationStore::new()),
+        reputation: Arc::new(acip_sidecar::reputation::InMemoryReputationStore::new()),
     });
 
     Router::new()
         .route(
             "/v1/acip/status",
-            get(moltbot_acip_sidecar::status::get_status),
+            get(acip_sidecar::status::get_status),
         )
         .route("/v1/acip/policies", get(routes::list_policies))
         .with_state(st)

@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::startup;
+use acip_sidecar::startup;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 #[test]

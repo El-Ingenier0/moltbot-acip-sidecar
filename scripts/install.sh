@@ -6,14 +6,14 @@ set -euo pipefail
 # - Installs to /opt/acip
 # - Creates /etc/acip + writes config.toml if missing
 # - Installs systemd unit
-# - Creates system user/group (acip)
+# - Creates system user/group (acip_user)
 
-APP_USER="acip"
-APP_GROUP="acip"
+APP_USER="acip_user"
+APP_GROUP="acip_user"
 PREFIX="/opt/acip"
 ETC_DIR="/etc/acip"
-UNIT_SRC="packaging/moltbot-acip-sidecar.service"
-UNIT_DST="/etc/systemd/system/moltbot-acip-sidecar.service"
+UNIT_SRC="packaging/acip-sidecar.service"
+UNIT_DST="/etc/systemd/system/acip-sidecar.service"
 
 need_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -50,7 +50,7 @@ main() {
 
   echo "[3/6] Installing binary to ${PREFIX}"
   install -d -m 0755 "${PREFIX}"
-  install -m 0755 target/release/moltbot-acip-sidecar "${PREFIX}/moltbot-acip-sidecar"
+  install -m 0755 target/release/acip-sidecar "${PREFIX}/acip-sidecar"
 
   echo "[4/6] Ensuring ${ETC_DIR} exists"
   install -d -m 0755 "${ETC_DIR}"
@@ -72,13 +72,14 @@ main() {
   systemctl daemon-reload
 
   echo "[6/6] Enabling and starting service"
-  systemctl enable --now moltbot-acip-sidecar
+  systemctl enable --now acip-sidecar
 
   echo "Done. Next steps:"
   echo "- Edit ${ETC_DIR}/secrets.env (API keys + ACIP_AUTH_TOKEN)"
-  echo "- Restart: systemctl restart moltbot-acip-sidecar"
-  echo "- Logs: journalctl -u moltbot-acip-sidecar -f"
+  echo "- Restart: systemctl restart acip-sidecar"
+  echo "- Logs: journalctl -u acip-sidecar -f"
   echo "- Health: curl -sS http://127.0.0.1:18795/health"
+  echo "- Unix socket option: set server.unix_socket=/run/acip/acip-sidecar.sock and restart"
 }
 
 main "$@"

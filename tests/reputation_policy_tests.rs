@@ -1,6 +1,6 @@
-use moltbot_acip_sidecar::reputation::ReputationRecord;
-use moltbot_acip_sidecar::reputation_policy::{apply_reputation, ReputationThresholds};
-use moltbot_acip_sidecar::sentry::{Action, Decision, RiskLevel};
+use acip_sidecar::reputation::ReputationRecord;
+use acip_sidecar::reputation_policy::{apply_reputation, ReputationThresholds};
+use acip_sidecar::sentry::{Action, Decision, RiskLevel};
 
 fn base_decision(tools_allowed: bool) -> Decision {
     Decision {

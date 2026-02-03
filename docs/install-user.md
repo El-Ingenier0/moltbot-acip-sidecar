@@ -11,7 +11,7 @@ This option installs **ACIP sidecar as a user service** (no root required).
 
 ## Paths (recommended)
 
-- Binary: `~/.local/bin/moltbot-acip-sidecar`
+- Binary: `~/.local/bin/acip-sidecar`
 - Config: `~/.config/acip/config.toml`
 - Secrets: `~/.config/acip/secrets.env` (mode 600)
 - Policies (optional): `~/.config/acip/policies.json`
@@ -28,7 +28,7 @@ Install binary:
 
 ```bash
 install -d -m 0755 ~/.local/bin
-install -m 0755 target/release/moltbot-acip-sidecar ~/.local/bin/moltbot-acip-sidecar
+install -m 0755 target/release/acip-sidecar ~/.local/bin/acip-sidecar
 ```
 
 Config/secrets:
@@ -44,9 +44,9 @@ Systemd user unit:
 
 ```bash
 mkdir -p ~/.config/systemd/user
-cp packaging/moltbot-acip-sidecar.user.service ~/.config/systemd/user/moltbot-acip-sidecar.service
+cp packaging/acip-sidecar.user.service ~/.config/systemd/user/acip-sidecar.service
 systemctl --user daemon-reload
-systemctl --user enable --now moltbot-acip-sidecar
+systemctl --user enable --now acip-sidecar
 ```
 
 Optional (keep running while logged out):
@@ -58,7 +58,7 @@ loginctl enable-linger $USER
 Logs:
 
 ```bash
-journalctl --user -u moltbot-acip-sidecar -f
+journalctl --user -u acip-sidecar -f
 ```
 
 ## Extractor sandbox knobs (optional)

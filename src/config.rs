@@ -21,6 +21,9 @@ pub struct ServiceConfig {
 pub struct ServerConfig {
     pub host: Option<String>,
     pub port: Option<u16>,
+    /// Optional Unix domain socket path (Linux/macOS). If set, the server binds this socket
+    /// instead of TCP host:port.
+    pub unix_socket: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

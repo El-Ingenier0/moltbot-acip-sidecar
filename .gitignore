@@ -1,6 +1,5 @@
 # Rust / cargo
 /target/
-Cargo.lock
 
 # Local env
 .env

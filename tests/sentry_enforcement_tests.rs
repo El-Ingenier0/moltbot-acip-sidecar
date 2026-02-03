@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use axum::http::HeaderMap;
-use moltbot_acip_sidecar::model_policy::{PolicyConfig, Provider};
-use moltbot_acip_sidecar::sentry::{
+use acip_sidecar::model_policy::{PolicyConfig, Provider};
+use acip_sidecar::sentry::{
     parse_and_validate_decision, Action, DecisionEngine, ModelClient, RiskLevel,
 };
 use serde_json::json;
@@ -32,11 +32,11 @@ impl ModelClient for FakeClient {
 
 fn policy() -> PolicyConfig {
     PolicyConfig {
-        l1: moltbot_acip_sidecar::model_policy::ModelRef {
+        l1: acip_sidecar::model_policy::ModelRef {
             provider: Provider::Gemini,
             model: "gemini-2.0-flash".to_string(),
         },
-        l2: moltbot_acip_sidecar::model_policy::ModelRef {
+        l2: acip_sidecar::model_policy::ModelRef {
             provider: Provider::Anthropic,
             model: "claude-3-5-haiku-latest".to_string(),
         },

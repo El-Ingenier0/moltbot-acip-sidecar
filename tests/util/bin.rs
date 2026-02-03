@@ -4,7 +4,7 @@ use std::{
 };
 
 pub fn bin_path() -> &'static str {
-    env!("CARGO_BIN_EXE_moltbot-acip-sidecar")
+    env!("CARGO_BIN_EXE_acip-sidecar")
 }
 
 /// A small helper to spawn the binary in tests and ensure we never hang.

@@ -1,9 +1,9 @@
 # User-level systemd unit (no root required)
 # Install:
 #   mkdir -p ~/.config/systemd/user
-#   cp packaging/moltbot-acip-sidecar.user.service ~/.config/systemd/user/moltbot-acip-sidecar.service
+#   cp packaging/acip-sidecar.user.service ~/.config/systemd/user/acip-sidecar.service
 #   systemctl --user daemon-reload
-#   systemctl --user enable --now moltbot-acip-sidecar
+#   systemctl --user enable --now acip-sidecar
 # Optional: keep it running while logged out:
 #   loginctl enable-linger $USER
 
@@ -14,7 +14,7 @@ After=network.target
 [Service]
 Type=simple
 # Prefer user-local install. Adjust as needed.
-ExecStart=%h/.local/bin/moltbot-acip-sidecar --config %h/.config/acip/config.toml
+ExecStart=%h/.local/bin/acip-sidecar --config %h/.config/acip/config.toml
 Restart=on-failure
 RestartSec=2
 

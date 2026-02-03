@@ -1,4 +1,4 @@
-use moltbot_acip_sidecar::config;
+use acip_sidecar::config;
 use std::io::Write;
 
 #[test]

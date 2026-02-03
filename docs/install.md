@@ -16,28 +16,28 @@ This service is intended to run as a small localhost HTTP daemon.
 ## Build
 
 ```bash
-git clone https://github.com/El-Ingenier0/moltbot-acip-sidecar.git
-cd moltbot-acip-sidecar
+git clone https://github.com/El-Ingenier0/acip-sidecar.git
+cd acip-sidecar
 cargo build --release
 ```
 
 Binary will be at:
 
-- `target/release/moltbot-acip-sidecar`
+- `target/release/acip-sidecar`
 
 ## Create service user/group
 
 ```bash
-sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin acip || true
-sudo groupadd --system acip || true
-sudo usermod -a -G acip acip || true
+sudo useradd --system --home /nonexistent --shell /usr/sbin/nologin acip_user || true
+sudo groupadd --system acip_user || true
+sudo usermod -a -G acip_user acip_user || true
 ```
 
 ## Install files
 
 ```bash
 sudo install -d -m 0755 /opt/acip
-sudo install -m 0755 target/release/moltbot-acip-sidecar /opt/acip/moltbot-acip-sidecar
+sudo install -m 0755 target/release/acip-sidecar /opt/acip/acip-sidecar
 
 sudo install -d -m 0755 /etc/acip
 sudo install -m 0644 config.example.toml /etc/acip/config.toml
@@ -73,23 +73,30 @@ ACIP_AUTH_TOKEN=...
 Copy the unit template:
 
 ```bash
-sudo install -m 0644 packaging/moltbot-acip-sidecar.service /etc/systemd/system/moltbot-acip-sidecar.service
+sudo install -m 0644 packaging/acip-sidecar.service /etc/systemd/system/acip-sidecar.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now moltbot-acip-sidecar
+sudo systemctl enable --now acip-sidecar
 ```
 
 Check logs:
 
 ```bash
-journalctl -u moltbot-acip-sidecar -f
+journalctl -u acip-sidecar -f
 ```
 
 ## Smoke test
 
-Health:
+Health (TCP):
 
 ```bash
 curl -sS http://127.0.0.1:18795/health
+```
+
+Health (Unix socket):
+
+```bash
+# Requires curl built with --unix-socket support
+curl --unix-socket /run/acip/acip-sidecar.sock -sS http://localhost/health
 ```
 
 Ingest (token optional depending on config):

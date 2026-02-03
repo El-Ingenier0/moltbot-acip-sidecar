@@ -12,7 +12,7 @@
 
 ### Error
 ```
-⚠️ 📝 Edit: ~/clawd/moltbot-acip-sidecar/src/main.rs failed: Could not find the exact text in /home/ceverett/clawd/moltbot-acip-sidecar/src/main.rs. The old text must match exactly including all whitespace and newlines.
+⚠️ 📝 Edit: ~/clawd/acip-sidecar/src/main.rs failed: Could not find the exact text in /home/ceverett/clawd/acip-sidecar/src/main.rs. The old text must match exactly including all whitespace and newlines.
 ```
 
 ### Context
