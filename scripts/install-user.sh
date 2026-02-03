@@ -20,7 +20,54 @@ need_cmd() {
   }
 }
 
+parse_args() {
+  L1_MODEL="gemini-2.0-flash"
+  L2_MODEL="claude-3-5-haiku-latest"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --l1-model)
+        L1_MODEL="$2"; shift 2 ;;
+      --l2-model)
+        L2_MODEL="$2"; shift 2 ;;
+      -h|--help)
+        cat <<'EOF'
+Usage: install-user.sh [--l1-model <model>] [--l2-model <model>]
+
+This installer configures the default model policy via environment variables
+in the systemd user service.
+EOF
+        exit 0
+        ;;
+      *)
+        echo "Unknown arg: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+model_provider_for() {
+  local m
+  m="${1,,}"
+  if [[ "$m" == claude-* || "$m" == anthropic/* ]]; then
+    echo "anthropic"; return 0
+  fi
+  if [[ "$m" == gemini-* || "$m" == google/* ]]; then
+    echo "gemini"; return 0
+  fi
+  if [[ "$m" == *claude* || "$m" == *anthropic* ]]; then
+    echo "anthropic"; return 0
+  fi
+  if [[ "$m" == *gemini* || "$m" == *google* ]]; then
+    echo "gemini"; return 0
+  fi
+  echo "unknown"; return 0
+}
+
 main() {
+  parse_args "$@"
+
   need_cmd systemctl
   need_cmd install
 
@@ -81,6 +128,26 @@ main() {
   echo "[4/5] Installing systemd user unit"
   install -d -m 0755 "$HOME/.config/systemd/user"
   install -m 0644 "${UNIT_SRC}" "${UNIT_DST}"
+
+  L1_PROVIDER=$(model_provider_for "${L1_MODEL}")
+  L2_PROVIDER=$(model_provider_for "${L2_MODEL}")
+  if [[ "$L1_PROVIDER" == "unknown" || "$L2_PROVIDER" == "unknown" ]]; then
+    echo "ERROR: Could not infer provider for model(s)." >&2
+    echo "  L1_MODEL=${L1_MODEL} -> ${L1_PROVIDER}" >&2
+    echo "  L2_MODEL=${L2_MODEL} -> ${L2_PROVIDER}" >&2
+    echo "Hint: use model names like gemini-*, claude-*" >&2
+    exit 1
+  fi
+
+  DROPIN_DIR="$HOME/.config/systemd/user/acip-sidecar.service.d"
+  install -d -m 0755 "$DROPIN_DIR"
+  cat >"$DROPIN_DIR/10-models.conf" <<EOF
+[Service]
+Environment=ACIP_L1_PROVIDER=${L1_PROVIDER}
+Environment=ACIP_L1_MODEL=${L1_MODEL}
+Environment=ACIP_L2_PROVIDER=${L2_PROVIDER}
+Environment=ACIP_L2_MODEL=${L2_MODEL}
+EOF
 
   systemctl --user daemon-reload
 
