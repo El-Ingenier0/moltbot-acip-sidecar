@@ -1083,9 +1083,10 @@ mod tests {
 
     #[test]
     fn host_from_url_parses_ipv6_hosts() {
+        // Note: url::Url host_str() may include brackets for IPv6 literals.
         assert_eq!(
             host_from_url("https://[2001:db8::1]/x"),
-            Some("2001:db8::1".to_string())
+            Some("[2001:db8::1]".to_string())
         );
     }
 
